@@ -1,0 +1,21 @@
+{
+  "name": "pureman",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "concurrently 'spago build --watch' 'node ./build.mjs --watch'" 
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^8.2.1",
+    "esbuild": "^0.19.2",
+    "esbuild-copy-static-files": "^0.1.0",
+    "esbuild-plugin-purescript": "^1.1.1",
+    "purescript": "^0.15.10",
+    "purs-tidy": "^0.10.0"
+  }
+}
