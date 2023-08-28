@@ -4,12 +4,14 @@ import Prelude
 
 import Data.Foldable (for_)
 import Effect (Effect)
-import Game.Pureman (drawMaze, loadSpriteSheet, mazeString, newPacman, pacmanDraw, parseMaze)
+import Game.Pureman (drawMaze, loadSpriteSheet, loop, mazeString, newPacman, pacmanDraw, parseMaze)
 import Graphics.Canvas (getCanvasElementById, getContext2D, rect, setFillStyle, setStrokeStyle, strokePath)
 import Uitl (setImageSmoothing)
+import Web.HTML (window)
 
 main :: Effect Unit
 main = do
+  win <- window
   maybeCanvas <- getCanvasElementById "canvas"
   for_ maybeCanvas $ \canvas -> do
     ctx <- getContext2D canvas
@@ -21,7 +23,7 @@ main = do
     let maze = parseMaze mazeString
     loadSpriteSheet $ \maybeAtlas -> do
       for_ maybeAtlas \atlas -> do
-        let pacman = newPacman atlas
+        let state = { pacman: newPacman atlas, maze }
         drawMaze atlas ctx maze
-        pacmanDraw pacman ctx
+        loop ctx win state
 

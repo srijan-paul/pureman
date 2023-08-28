@@ -3,10 +3,13 @@ module Game.Pureman
   , Dir(..)
   , Frame
   , Maze
+  , State
+  , Pureman
   , TileKind(..)
   , drawAnimation
   , drawMaze
   , loadSpriteSheet
+  , loop
   , mapSize
   , mazeString
   , newPacman
@@ -32,6 +35,7 @@ import Game.Vec2 (Vec2, vec)
 import Graphics.Canvas (CanvasImageSource, Context2D, drawImageFull, tryLoadImage)
 import Partial.Unsafe (unsafePartial)
 import Undefined (undefined)
+import Web.HTML.Window (Window, requestAnimationFrame)
 
 mapSize :: (Int /\ Int)
 mapSize = (30 /\ 32)
@@ -171,7 +175,7 @@ drawAnimation ctx { frames, index, atlas, scale } (x /\ y) = do
   for_ maybeFrame $ \frame -> do
     drawImageFull ctx atlas frame.x frame.y frame.w frame.h x y (frame.w * scale) (frame.h * scale)
 
-data Dir = Up | Left | Down | Right
+data Dir = Up | Left | Down | Right | None
 
 type Pureman =
   { animation :: Animation
@@ -183,7 +187,7 @@ type Pureman =
 
 newPacman :: CanvasImageSource -> Pureman
 newPacman atlas =
-  { animation: { frames, index: 0, atlas, scale: 2.0 }, pos: vec 0.0 0.0, w: 0.0, h: 0.0, moveDir: Up }
+  { animation: { frames, index: 0, atlas, scale: 2.0 }, pos: vec 0.0 0.0, w: 0.0, h: 0.0, moveDir: None }
   where
   frames =
     [ { x: 456.0, y: 0.0, w: 16.0, h: 16.0 }
@@ -192,8 +196,26 @@ newPacman atlas =
     ]
 
 pacmanUpdate :: Pureman -> Pureman
-pacmanUpdate pureman@{ animation } =
-  pureman { animation = stepAnimation animation }
+pacmanUpdate pureman@{ animation, pos, moveDir } =
+  pureman { animation = stepAnimation animation, pos = updatedPos }
+  where
+  updatedPos = case moveDir of
+    Up -> pos + (0.0 /\ -1.0)
+    Down -> pos + (0.0 /\ 1.0)
+    Left -> pos + (-1.0 /\ 0.0)
+    Right -> pos + (1.0 /\ 0.0)
+    None -> pos
 
 pacmanDraw :: Pureman -> Context2D -> Effect Unit
 pacmanDraw { animation, pos } ctx = drawAnimation ctx animation pos
+
+type State =
+  { pacman :: Pureman
+  , maze :: Maze
+  }
+
+loop :: Context2D -> Window -> State -> Effect Unit
+loop ctx window state = do
+  let state' = state { pacman = pacmanUpdate state.pacman }
+  pacmanDraw state'.pacman ctx
+  void $ requestAnimationFrame (loop ctx window state') window
