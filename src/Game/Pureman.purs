@@ -22,19 +22,22 @@ module Game.Pureman
 import Prelude
 
 import Data.Array as A
+import Data.DateTime.Instant (unInstant)
 import Data.Foldable (for_)
 import Data.Int (toNumber)
 import Data.Maybe (Maybe)
 import Data.String as S
 import Data.String.CodeUnits (toCharArray)
+import Data.Time.Duration (Milliseconds(..))
 import Data.Tuple (fst, snd)
 import Data.Tuple.Nested ((/\), type (/\))
 import Debug as Debug
 import Effect (Effect)
+import Effect.Console as Console
+import Effect.Now as Now
 import Game.Vec2 (Vec2, vec)
 import Graphics.Canvas (CanvasImageSource, Context2D, drawImageFull, tryLoadImage)
 import Partial.Unsafe (unsafePartial)
-import Undefined (undefined)
 import Web.HTML.Window (Window, requestAnimationFrame)
 
 mapSize :: (Int /\ Int)
@@ -160,14 +163,35 @@ type Frame =
   , h :: Number
   }
 
-type Animation = { frames :: Array Frame, index :: Int, atlas :: CanvasImageSource, scale :: Number }
+type Animation =
+  { frames :: Array Frame
+  , index :: Int
+  , atlas :: CanvasImageSource
+  , scale :: Number
+  , frameDuration :: Number
+  , timeSinceLastFrame :: Number
+  }
 
-stepAnimation :: Animation -> Animation
-stepAnimation anim@{ frames, index } =
-  anim
-    { index =
-        if index + 1 < A.length frames then index + 1 else 0
-    }
+mkAnimation :: CanvasImageSource -> Array Frame -> Number -> Number -> Animation
+mkAnimation atlas frames frameDuration scale =
+  { frames
+  , atlas
+  , frameDuration
+  , scale
+  , index: 0
+  , timeSinceLastFrame: 0.0
+  }
+
+stepAnimation :: Number -> Animation -> Animation
+stepAnimation dt anim@{ frames, index, timeSinceLastFrame, frameDuration } =
+  let
+    shouldStep = timeSinceLastFrame + dt > frameDuration
+  in
+    if shouldStep then anim { timeSinceLastFrame = 0.0, index = stepIndex index }
+    else anim { timeSinceLastFrame = timeSinceLastFrame + dt }
+
+  where
+  stepIndex idx = if idx + 1 < A.length frames then idx + 1 else 0
 
 drawAnimation :: Context2D -> Animation -> Vec2 -> Effect Unit
 drawAnimation ctx { frames, index, atlas, scale } (x /\ y) = do
@@ -187,7 +211,12 @@ type Pureman =
 
 newPacman :: CanvasImageSource -> Pureman
 newPacman atlas =
-  { animation: { frames, index: 0, atlas, scale: 2.0 }, pos: vec 0.0 0.0, w: 0.0, h: 0.0, moveDir: None }
+  { animation: mkAnimation atlas frames 120.0 2.0
+  , pos: vec 0.0 0.0
+  , w: 0.0
+  , h: 0.0
+  , moveDir: None
+  }
   where
   frames =
     [ { x: 456.0, y: 0.0, w: 16.0, h: 16.0 }
@@ -195,9 +224,9 @@ newPacman atlas =
     , { x: 488.0, y: 0.0, w: 16.0, h: 16.0 }
     ]
 
-pacmanUpdate :: Pureman -> Pureman
-pacmanUpdate pureman@{ animation, pos, moveDir } =
-  pureman { animation = stepAnimation animation, pos = updatedPos }
+pacmanUpdate :: Number -> Pureman -> Pureman
+pacmanUpdate dt pureman@{ animation, pos, moveDir } =
+  pureman { animation = stepAnimation dt animation, pos = updatedPos }
   where
   updatedPos = case moveDir of
     Up -> pos + (0.0 /\ -1.0)
@@ -214,8 +243,12 @@ type State =
   , maze :: Maze
   }
 
-loop :: Context2D -> Window -> State -> Effect Unit
-loop ctx window state = do
-  let state' = state { pacman = pacmanUpdate state.pacman }
+loop :: Context2D -> Window -> State -> Number -> Effect Unit
+loop ctx window state prevMs = do
+  (Milliseconds currentMs) <- Now.now >>= unInstant >>> pure
+  let
+    delta = currentMs - prevMs
+
+  let state' = state { pacman = pacmanUpdate delta state.pacman }
   pacmanDraw state'.pacman ctx
-  void $ requestAnimationFrame (loop ctx window state') window
+  void $ requestAnimationFrame (loop ctx window state' currentMs) window

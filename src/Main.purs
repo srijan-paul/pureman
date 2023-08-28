@@ -2,8 +2,11 @@ module Main where
 
 import Prelude
 
+import Data.DateTime.Instant (unInstant)
 import Data.Foldable (for_)
+import Data.Time.Duration (Milliseconds(..))
 import Effect (Effect)
+import Effect.Now (now)
 import Game.Pureman (drawMaze, loadSpriteSheet, loop, mazeString, newPacman, pacmanDraw, parseMaze)
 import Graphics.Canvas (getCanvasElementById, getContext2D, rect, setFillStyle, setStrokeStyle, strokePath)
 import Uitl (setImageSmoothing)
@@ -13,6 +16,8 @@ main :: Effect Unit
 main = do
   win <- window
   maybeCanvas <- getCanvasElementById "canvas"
+
+  (Milliseconds time) <- now >>= unInstant >>> pure
   for_ maybeCanvas $ \canvas -> do
     ctx <- getContext2D canvas
     setImageSmoothing ctx false
@@ -25,5 +30,4 @@ main = do
       for_ maybeAtlas \atlas -> do
         let state = { pacman: newPacman atlas, maze }
         drawMaze atlas ctx maze
-        loop ctx win state
-
+        loop ctx win state time
