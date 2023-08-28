@@ -4,7 +4,7 @@ import Prelude
 
 import Data.Foldable (for_)
 import Effect (Effect)
-import Game.Pureman (drawMaze, loadSpriteSheet, mazeString, parseMaze)
+import Game.Pureman (drawMaze, loadSpriteSheet, mazeString, newPacman, pacmanDraw, parseMaze)
 import Graphics.Canvas (getCanvasElementById, getContext2D, rect, setFillStyle, setStrokeStyle, strokePath)
 import Uitl (setImageSmoothing)
 
@@ -19,7 +19,9 @@ main = do
     let path = rect ctx { x: 20.0, y: 20.0, width: 100.0, height: 100.0 }
     strokePath ctx path
     let maze = parseMaze mazeString
-    loadSpriteSheet $ \maybeImage -> do
-      for_ maybeImage \image -> do
-        drawMaze image ctx maze
+    loadSpriteSheet $ \maybeAtlas -> do
+      for_ maybeAtlas \atlas -> do
+        let pacman = newPacman atlas
+        drawMaze atlas ctx maze
+        pacmanDraw pacman ctx
 
