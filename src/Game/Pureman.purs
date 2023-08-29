@@ -6,8 +6,7 @@ import Data.Array as A
 import Data.DateTime.Instant (unInstant)
 import Data.Foldable (for_)
 import Data.Int (toNumber)
-import Data.List (List(..), (:))
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe)
 import Data.String as S
 import Data.String.CodeUnits (toCharArray)
 import Data.Time.Duration (Milliseconds(..))
@@ -21,7 +20,6 @@ import Game.Vec2 (Vec2, vec)
 import Graphics.Canvas (CanvasElement, CanvasImageSource, Context2D, drawImageFull, getContext2D, rect, setFillStyle, setStrokeStyle, strokePath, tryLoadImage)
 import Partial.Unsafe (unsafePartial)
 import Uitl (setImageSmoothing)
-import Undefined (undefined)
 import Web.Event.Event (EventType(..))
 import Web.Event.EventTarget (addEventListener, eventListener)
 import Web.Event.Internal.Types (Event)
@@ -246,6 +244,11 @@ type State =
   , maze :: Maze
   }
 
+type Game =
+  { atlas :: CanvasImageSource
+  , stateRef :: Ref.Ref State
+  }
+
 newState :: Pureman -> State
 newState pacman =
   { pacman
@@ -254,19 +257,21 @@ newState pacman =
 
 update :: Number -> Ref.Ref State -> Effect Unit
 update dt =
-  Ref.modify_ $ \s -> s { pacman = pacmanUpdate dt s.pacman }
+  Ref.modify_ \s -> s { pacman = pacmanUpdate dt s.pacman }
 
 draw :: Context2D -> State -> Effect Unit
 draw ctx state = do
   pacmanDraw ctx state.pacman
 
-loop :: Context2D -> Window -> Ref.Ref State -> Number -> Effect Unit
-loop ctx window stateRef prevMs = do
-  (Milliseconds currentMs) <- Now.now >>= unInstant >>> pure
+loop :: Context2D -> Window -> Game -> Number -> Effect Unit
+loop ctx window game prevMs = do
+  Milliseconds currentMs <- Now.now >>= unInstant >>> pure
   let delta = currentMs - prevMs
-  draw ctx =<< Ref.read stateRef
-  update delta stateRef
-  void $ requestAnimationFrame (loop ctx window stateRef currentMs) window
+  state <- Ref.read game.stateRef
+  drawMaze game.atlas ctx state.maze
+  draw ctx state
+  update delta game.stateRef
+  void $ requestAnimationFrame (loop ctx window game currentMs) window
 
 newGame :: Window -> CanvasElement -> Effect Unit
 newGame win canvas = do
@@ -278,12 +283,10 @@ newGame win canvas = do
   setFillStyle ctx "red"
   let path = rect ctx { x: 20.0, y: 20.0, width: 100.0, height: 100.0 }
   strokePath ctx path
-  let maze = parseMaze mazeString
   loadSpriteSheet $ \maybeAtlas -> do
     for_ maybeAtlas \atlas -> do
-      state <- Ref.new $ newState (newPacman atlas)
-      keypressListener <- eventListener $ handleKeyPress state
+      stateRef <- Ref.new $ newState (newPacman atlas)
+      let game = { stateRef, atlas }
+      keypressListener <- eventListener $ handleKeyPress stateRef
       addEventListener (EventType "keydown") keypressListener false (toEventTarget doc)
-      drawMaze atlas ctx maze
-      loop ctx win state time
-
+      loop ctx win game time
