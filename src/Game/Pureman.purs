@@ -1,23 +1,4 @@
-module Game.Pureman
-  ( Animation
-  , Dir(..)
-  , Frame
-  , Maze
-  , State
-  , Pureman
-  , TileKind(..)
-  , drawAnimation
-  , drawMaze
-  , loadSpriteSheet
-  , loop
-  , mapSize
-  , mazeString
-  , newPacman
-  , pacmanDraw
-  , pacmanUpdate
-  , parseMaze
-  , stepAnimation
-  ) where
+module Game.Pureman (newGame) where
 
 import Prelude
 
@@ -25,20 +6,28 @@ import Data.Array as A
 import Data.DateTime.Instant (unInstant)
 import Data.Foldable (for_)
 import Data.Int (toNumber)
-import Data.Maybe (Maybe)
+import Data.List (List(..), (:))
+import Data.Maybe (Maybe(..))
 import Data.String as S
 import Data.String.CodeUnits (toCharArray)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Tuple (fst, snd)
 import Data.Tuple.Nested ((/\), type (/\))
-import Debug as Debug
 import Effect (Effect)
 import Effect.Console as Console
 import Effect.Now as Now
+import Effect.Ref as Ref
 import Game.Vec2 (Vec2, vec)
-import Graphics.Canvas (CanvasImageSource, Context2D, drawImageFull, tryLoadImage)
+import Graphics.Canvas (CanvasElement, CanvasImageSource, Context2D, drawImageFull, getContext2D, rect, setFillStyle, setStrokeStyle, strokePath, tryLoadImage)
 import Partial.Unsafe (unsafePartial)
-import Web.HTML.Window (Window, requestAnimationFrame)
+import Uitl (setImageSmoothing)
+import Undefined (undefined)
+import Web.Event.Event (EventType(..))
+import Web.Event.EventTarget (addEventListener, eventListener)
+import Web.Event.Internal.Types (Event)
+import Web.HTML.HTMLDocument (toEventTarget)
+import Web.HTML.Window (Window, document, requestAnimationFrame)
+import Web.UIEvent.KeyboardEvent as KE
 
 mapSize :: (Int /\ Int)
 mapSize = (30 /\ 32)
@@ -85,7 +74,6 @@ _______7./7 |      ! /7./_______
 ##|..........................|##
 ##L--------------------------J##"""
 
-type Maze = Array (Array TileKind)
 data TileKind
   = Empty
   | WallLeft
@@ -96,6 +84,8 @@ data TileKind
   | WallTL
   | WallBR
   | WallBL
+
+type Maze = Array (Array TileKind)
 
 infixl 5 A.unsafeIndex as <!!>
 
@@ -137,7 +127,6 @@ drawMaze atlas ctx maze = do
   coords WallLeft = (16.0 /\ 24.0)
   coords WallRight = (40.0 /\ 24.0)
   coords Empty = (0.0 /\ 80.0)
-  coords _ = (528.0 /\ 24.0)
 
 parseMaze :: String -> Maze
 parseMaze mazeS =
@@ -195,8 +184,7 @@ stepAnimation dt anim@{ frames, index, timeSinceLastFrame, frameDuration } =
 
 drawAnimation :: Context2D -> Animation -> Vec2 -> Effect Unit
 drawAnimation ctx { frames, index, atlas, scale } (x /\ y) = do
-  let maybeFrame = frames A.!! index
-  for_ maybeFrame $ \frame -> do
+  for_ (frames A.!! index) \frame -> do
     drawImageFull ctx atlas frame.x frame.y frame.w frame.h x y (frame.w * scale) (frame.h * scale)
 
 data Dir = Up | Left | Down | Right | None
@@ -224,6 +212,10 @@ newPacman atlas =
     , { x: 488.0, y: 0.0, w: 16.0, h: 16.0 }
     ]
 
+changeDir :: Ref.Ref State -> Dir -> Effect Unit
+changeDir stateRef dir = do
+  Ref.modify_ (\s -> s { pacman = s.pacman { moveDir = dir } }) stateRef
+
 pacmanUpdate :: Number -> Pureman -> Pureman
 pacmanUpdate dt pureman@{ animation, pos, moveDir } =
   pureman { animation = stepAnimation dt animation, pos = updatedPos }
@@ -235,20 +227,63 @@ pacmanUpdate dt pureman@{ animation, pos, moveDir } =
     Right -> pos + (1.0 /\ 0.0)
     None -> pos
 
-pacmanDraw :: Pureman -> Context2D -> Effect Unit
-pacmanDraw { animation, pos } ctx = drawAnimation ctx animation pos
+handleKeyPress :: Ref.Ref State -> Event -> Effect Unit
+handleKeyPress state event = do
+  let maybeKey = KE.code <$> KE.fromEvent event
+  for_ maybeKey $ \key -> do
+    case key of
+      "ArrowUp" -> changeDir state Up
+      "ArrowDown" -> changeDir state Down
+      "ArrowLeft" -> changeDir state Left
+      "ArrowRight" -> changeDir state Right
+      _ -> pure unit
+
+pacmanDraw :: Context2D -> Pureman -> Effect Unit
+pacmanDraw ctx { animation, pos } = drawAnimation ctx animation pos
 
 type State =
   { pacman :: Pureman
   , maze :: Maze
   }
 
-loop :: Context2D -> Window -> State -> Number -> Effect Unit
-loop ctx window state prevMs = do
-  (Milliseconds currentMs) <- Now.now >>= unInstant >>> pure
-  let
-    delta = currentMs - prevMs
+newState :: Pureman -> State
+newState pacman =
+  { pacman
+  , maze: parseMaze mazeString
+  }
 
-  let state' = state { pacman = pacmanUpdate delta state.pacman }
-  pacmanDraw state'.pacman ctx
-  void $ requestAnimationFrame (loop ctx window state' currentMs) window
+update :: Number -> Ref.Ref State -> Effect Unit
+update dt =
+  Ref.modify_ $ \s -> s { pacman = pacmanUpdate dt s.pacman }
+
+draw :: Context2D -> State -> Effect Unit
+draw ctx state = do
+  pacmanDraw ctx state.pacman
+
+loop :: Context2D -> Window -> Ref.Ref State -> Number -> Effect Unit
+loop ctx window stateRef prevMs = do
+  (Milliseconds currentMs) <- Now.now >>= unInstant >>> pure
+  let delta = currentMs - prevMs
+  draw ctx =<< Ref.read stateRef
+  update delta stateRef
+  void $ requestAnimationFrame (loop ctx window stateRef currentMs) window
+
+newGame :: Window -> CanvasElement -> Effect Unit
+newGame win canvas = do
+  (Milliseconds time) <- Now.now >>= unInstant >>> pure
+  ctx <- getContext2D canvas
+  doc <- document win
+  setImageSmoothing ctx false
+  setStrokeStyle ctx "red"
+  setFillStyle ctx "red"
+  let path = rect ctx { x: 20.0, y: 20.0, width: 100.0, height: 100.0 }
+  strokePath ctx path
+  let maze = parseMaze mazeString
+  loadSpriteSheet $ \maybeAtlas -> do
+    for_ maybeAtlas \atlas -> do
+      state <- Ref.new $ newState (newPacman atlas)
+      keypressListener <- eventListener $ handleKeyPress state
+      addEventListener (EventType "keydown") keypressListener false (toEventTarget doc)
+      drawMaze atlas ctx maze
+      loop ctx win state time
+

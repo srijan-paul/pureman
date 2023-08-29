@@ -12,16 +12,28 @@ to generate this file without the comments in this block.
 -}
 { name = "my-project"
 , dependencies =
-  [ "canvas"
+  [ "arrays"
+  , "canvas"
   , "console"
+  , "datetime"
   , "effect"
   , "foldable-traversable"
+  , "integers"
+  , "maybe"
+  , "now"
   , "numbers"
+  , "partial"
   , "prelude"
+  , "strings"
+  , "tuples"
   , "undefined"
   , "unordered-collections"
   , "web-dom"
+  , "web-events"
   , "web-html"
+  , "web-uievents"
+  , "lists"
+  , "refs"
   ]
 , packages = ./packages.dhall
 , sources = [ "src/**/*.purs", "test/**/*.purs" ]

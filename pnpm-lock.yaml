@@ -1,5 +1,10 @@
 lockfileVersion: '6.0'
 
+dependencies:
+  purs-backend-es:
+    specifier: ^1.4.1
+    version: 1.4.1
+
 devDependencies:
   concurrently:
     specifier: ^8.2.1
@@ -1156,6 +1161,11 @@ packages:
       - bluebird
       - supports-color
     dev: true
+
+  /purs-backend-es@1.4.1:
+    resolution: {integrity: sha512-v4cNtxAPCwZMR3id+8G+rZYKoBh1IO0GZiuJsyV8/geQxfDQ/U2LI4Wev8WxGEF8jzNNdO0XjWMFs8m5KugxfA==}
+    hasBin: true
+    dev: false
 
   /purs-tidy@0.10.0:
     resolution: {integrity: sha512-ULbJfBHRngczYwcOzugytRiNy+Guy2VXoAG1jMtGaSFEaUZk1lZkKU11t8jIZTrDdOrkgqlWCZLi3mfcHvdimA==}
