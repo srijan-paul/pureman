@@ -2,24 +2,26 @@ module Game.Pureman (newGame) where
 
 import Prelude
 
-import Data.Array as A
+import Data.Array ((!!), unsafeIndex, length)
 import Data.DateTime.Instant (unInstant)
 import Data.Foldable (for_)
-import Data.Int (toNumber)
-import Data.Maybe (Maybe)
+import Data.Int (floor, toNumber)
+import Data.Maybe (Maybe(..), isJust)
 import Data.String as S
 import Data.String.CodeUnits (toCharArray)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Tuple (fst, snd)
 import Data.Tuple.Nested ((/\), type (/\))
+import Debug as Debug
 import Effect (Effect)
 import Effect.Console as Console
 import Effect.Now as Now
 import Effect.Ref as Ref
 import Game.Vec2 (Vec2, vec)
-import Graphics.Canvas (CanvasElement, CanvasImageSource, Context2D, drawImageFull, getContext2D, rect, setFillStyle, setStrokeStyle, strokePath, tryLoadImage)
+import Graphics.Canvas (CanvasElement, CanvasImageSource, Context2D, drawImageFull, fillRect, getContext2D, rect, setFillStyle, setStrokeStyle, stroke, strokePath, strokeRect, tryLoadImage)
 import Partial.Unsafe (unsafePartial)
 import Uitl (setImageSmoothing)
+import Undefined (undefined)
 import Web.Event.Event (EventType(..))
 import Web.Event.EventTarget (addEventListener, eventListener)
 import Web.Event.Internal.Types (Event)
@@ -83,12 +85,15 @@ data TileKind
   | WallBR
   | WallBL
 
+derive instance eqTileKind :: Eq TileKind
+
 type Maze = Array (Array TileKind)
 
-infixl 5 A.unsafeIndex as <!!>
+infixl 5 unsafeIndex as <!!>
 
 drawMaze :: CanvasImageSource -> Context2D -> Maze -> Effect Unit
 drawMaze atlas ctx maze = do
+  setStrokeStyle ctx "red"
   go 0 0
   where
   go :: Int -> Int -> Effect Unit
@@ -114,6 +119,9 @@ drawMaze atlas ctx maze = do
   drawTile x y tile = do
     let (tx /\ ty) = coords tile
     drawImageFull ctx atlas tx ty 8.0 8.0 x y tileSize tileSize
+
+  -- when (tile /= Empty) $ do
+  --   strokeRect ctx { x, y, width: tileSize - 2.0, height: tileSize - 2.0 }
 
   coords :: TileKind -> (Number /\ Number)
   coords WallTL = (16.0 /\ 16.0)
@@ -141,6 +149,20 @@ parseMaze mazeS =
     | c == '|' = WallLeft
     | c == '!' = WallRight
     | otherwise = Empty
+
+tileAt :: Maze -> (Number /\ Number) -> Maybe TileKind
+tileAt maze (x /\ y) =
+  let
+    col = floor $ x / tileSize
+    row = floor $ y / tileSize
+  in
+    (maze !! row) >>= \r -> (r !! col)
+
+isWallAt :: Maze -> (Number /\ Number) -> Boolean
+isWallAt maze pos =
+  case ((/=) Empty) <$> tileAt maze pos of
+    Just res -> res
+    Nothing -> false
 
 -- A frame is an index into a spritesheet.
 type Frame =
@@ -178,11 +200,11 @@ stepAnimation dt anim@{ frames, index, timeSinceLastFrame, frameDuration } =
     else anim { timeSinceLastFrame = timeSinceLastFrame + dt }
 
   where
-  stepIndex idx = if idx + 1 < A.length frames then idx + 1 else 0
+  stepIndex idx = if idx + 1 < length frames then idx + 1 else 0
 
 drawAnimation :: Context2D -> Animation -> Vec2 -> Effect Unit
 drawAnimation ctx { frames, index, atlas, scale } (x /\ y) = do
-  for_ (frames A.!! index) \frame -> do
+  for_ (frames !! index) \frame -> do
     drawImageFull ctx atlas frame.x frame.y frame.w frame.h x y (frame.w * scale) (frame.h * scale)
 
 data Dir = Up | Left | Down | Right | None
@@ -191,16 +213,14 @@ type Pureman =
   { animation :: Animation
   , moveDir :: Dir
   , pos :: Vec2
-  , w :: Number -- hitbox width in pixels
-  , h :: Number -- hitbox height in pixels
+  , size :: Number -- hitbox size in pixels
   }
 
 newPacman :: CanvasImageSource -> Pureman
 newPacman atlas =
-  { animation: mkAnimation atlas frames 120.0 2.0
-  , pos: vec 0.0 0.0
-  , w: 0.0
-  , h: 0.0
+  { animation: mkAnimation atlas frames 120.0 1.8
+  , pos: vec 256.0 368.0
+  , size: tileSize
   , moveDir: None
   }
   where
@@ -214,16 +234,22 @@ changeDir :: Ref.Ref State -> Dir -> Effect Unit
 changeDir stateRef dir = do
   Ref.modify_ (\s -> s { pacman = s.pacman { moveDir = dir } }) stateRef
 
-pacmanUpdate :: Number -> Pureman -> Pureman
-pacmanUpdate dt pureman@{ animation, pos, moveDir } =
+pacmanUpdate :: Number -> State -> Pureman -> Pureman
+pacmanUpdate dt { maze } pureman@{ animation, pos, moveDir } =
   pureman { animation = stepAnimation dt animation, pos = updatedPos }
   where
-  updatedPos = case moveDir of
-    Up -> pos + (0.0 /\ -1.0)
-    Down -> pos + (0.0 /\ 1.0)
-    Left -> pos + (-1.0 /\ 0.0)
-    Right -> pos + (1.0 /\ 0.0)
-    None -> pos
+  updatedPos =
+    let
+      pos' = case moveDir of
+        Up -> pos + (0.0 /\ -1.0)
+        Down -> pos + (0.0 /\ 1.0)
+        Left -> pos + (-1.0 /\ 0.0)
+        Right -> pos + (1.0 /\ 0.0)
+        None -> pos
+      x = Debug.log $ isWallAt maze $ Debug.log pos'
+    in
+      if isWallAt maze pos' then pos
+      else pos'
 
 handleKeyPress :: Ref.Ref State -> Event -> Effect Unit
 handleKeyPress state event = do
@@ -237,7 +263,11 @@ handleKeyPress state event = do
       _ -> pure unit
 
 pacmanDraw :: Context2D -> Pureman -> Effect Unit
-pacmanDraw ctx { animation, pos } = drawAnimation ctx animation pos
+pacmanDraw ctx { animation, pos, size } = do
+  drawAnimation ctx animation (pos - ((size / 2.0) /\ (size / 2.0)))
+
+-- setStrokeStyle ctx "red"
+-- strokeRect ctx { x: fst pos, y: snd pos, width: size, height: size }
 
 type State =
   { pacman :: Pureman
@@ -255,21 +285,29 @@ newState pacman =
   , maze: parseMaze mazeString
   }
 
-update :: Number -> Ref.Ref State -> Effect Unit
-update dt =
-  Ref.modify_ \s -> s { pacman = pacmanUpdate dt s.pacman }
+stepState :: Number -> State -> State
+stepState dt s@{ pacman, maze } =
+  s { pacman = pacmanUpdate dt s pacman }
+  where
+  checkWall =
+    (tileAt maze pacman.pos) >>= \tile ->
+      if tile /= Empty then undefined
+      else undefined
 
-draw :: Context2D -> State -> Effect Unit
-draw ctx state = do
+update :: Number -> Ref.Ref State -> Effect Unit
+update dt = Ref.modify_ $ stepState dt
+
+draw :: Context2D -> Game -> Effect Unit
+draw ctx game = do
+  state <- Ref.read game.stateRef
+  drawMaze game.atlas ctx state.maze
   pacmanDraw ctx state.pacman
 
 loop :: Context2D -> Window -> Game -> Number -> Effect Unit
 loop ctx window game prevMs = do
   Milliseconds currentMs <- Now.now >>= unInstant >>> pure
   let delta = currentMs - prevMs
-  state <- Ref.read game.stateRef
-  drawMaze game.atlas ctx state.maze
-  draw ctx state
+  draw ctx game
   update delta game.stateRef
   void $ requestAnimationFrame (loop ctx window game currentMs) window
 
@@ -279,10 +317,6 @@ newGame win canvas = do
   ctx <- getContext2D canvas
   doc <- document win
   setImageSmoothing ctx false
-  setStrokeStyle ctx "red"
-  setFillStyle ctx "red"
-  let path = rect ctx { x: 20.0, y: 20.0, width: 100.0, height: 100.0 }
-  strokePath ctx path
   loadSpriteSheet $ \maybeAtlas -> do
     for_ maybeAtlas \atlas -> do
       stateRef <- Ref.new $ newState (newPacman atlas)
