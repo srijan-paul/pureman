@@ -2,26 +2,24 @@ module Game.Pureman (newGame) where
 
 import Prelude
 
-import Data.Array ((!!), unsafeIndex, length)
+import Data.Array ((!!), unsafeIndex)
 import Data.DateTime.Instant (unInstant)
 import Data.Foldable (for_)
 import Data.Int (floor, toNumber)
-import Data.Maybe (Maybe(..), isJust)
+import Data.Maybe (Maybe(..))
 import Data.String as S
 import Data.String.CodeUnits (toCharArray)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Tuple (fst, snd)
 import Data.Tuple.Nested ((/\), type (/\))
-import Debug as Debug
 import Effect (Effect)
-import Effect.Console as Console
 import Effect.Now as Now
 import Effect.Ref as Ref
+import Game.Animation (Animation, drawAnimation, mkAnimation, stepAnimation)
 import Game.Vec2 (Vec2, vec)
-import Graphics.Canvas (CanvasElement, CanvasImageSource, Context2D, drawImageFull, fillRect, getContext2D, rect, setFillStyle, setStrokeStyle, stroke, strokePath, strokeRect, tryLoadImage)
+import Graphics.Canvas (CanvasElement, CanvasImageSource, Context2D, drawImageFull, getContext2D, tryLoadImage)
 import Partial.Unsafe (unsafePartial)
 import Uitl (setImageSmoothing)
-import Undefined (undefined)
 import Web.Event.Event (EventType(..))
 import Web.Event.EventTarget (addEventListener, eventListener)
 import Web.Event.Internal.Types (Event)
@@ -93,7 +91,6 @@ infixl 5 unsafeIndex as <!!>
 
 drawMaze :: CanvasImageSource -> Context2D -> Maze -> Effect Unit
 drawMaze atlas ctx maze = do
-  setStrokeStyle ctx "red"
   go 0 0
   where
   go :: Int -> Int -> Effect Unit
@@ -164,49 +161,6 @@ isWallAt maze pos =
     Just res -> res
     Nothing -> false
 
--- A frame is an index into a spritesheet.
-type Frame =
-  { x :: Number
-  , y :: Number
-  , w :: Number
-  , h :: Number
-  }
-
-type Animation =
-  { frames :: Array Frame
-  , index :: Int
-  , atlas :: CanvasImageSource
-  , scale :: Number
-  , frameDuration :: Number
-  , timeSinceLastFrame :: Number
-  }
-
-mkAnimation :: CanvasImageSource -> Array Frame -> Number -> Number -> Animation
-mkAnimation atlas frames frameDuration scale =
-  { frames
-  , atlas
-  , frameDuration
-  , scale
-  , index: 0
-  , timeSinceLastFrame: 0.0
-  }
-
-stepAnimation :: Number -> Animation -> Animation
-stepAnimation dt anim@{ frames, index, timeSinceLastFrame, frameDuration } =
-  let
-    shouldStep = timeSinceLastFrame + dt > frameDuration
-  in
-    if shouldStep then anim { timeSinceLastFrame = 0.0, index = stepIndex index }
-    else anim { timeSinceLastFrame = timeSinceLastFrame + dt }
-
-  where
-  stepIndex idx = if idx + 1 < length frames then idx + 1 else 0
-
-drawAnimation :: Context2D -> Animation -> Vec2 -> Effect Unit
-drawAnimation ctx { frames, index, atlas, scale } (x /\ y) = do
-  for_ (frames !! index) \frame -> do
-    drawImageFull ctx atlas frame.x frame.y frame.w frame.h x y (frame.w * scale) (frame.h * scale)
-
 data Dir = Up | Left | Down | Right | None
 
 type Pureman =
@@ -246,7 +200,6 @@ pacmanUpdate dt { maze } pureman@{ animation, pos, moveDir } =
         Left -> pos + (-1.0 /\ 0.0)
         Right -> pos + (1.0 /\ 0.0)
         None -> pos
-      x = Debug.log $ isWallAt maze $ Debug.log pos'
     in
       if isWallAt maze pos' then pos
       else pos'
@@ -286,13 +239,8 @@ newState pacman =
   }
 
 stepState :: Number -> State -> State
-stepState dt s@{ pacman, maze } =
+stepState dt s@{ pacman } =
   s { pacman = pacmanUpdate dt s pacman }
-  where
-  checkWall =
-    (tileAt maze pacman.pos) >>= \tile ->
-      if tile /= Empty then undefined
-      else undefined
 
 update :: Number -> Ref.Ref State -> Effect Unit
 update dt = Ref.modify_ $ stepState dt
