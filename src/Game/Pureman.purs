@@ -12,12 +12,13 @@ import Data.String.CodeUnits (toCharArray)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Tuple (fst, snd)
 import Data.Tuple.Nested ((/\), type (/\))
+import Debug as Debug
 import Effect (Effect)
 import Effect.Now as Now
 import Effect.Ref as Ref
 import Game.Animation (Animation, drawAnimation, mkAnimation, stepAnimation)
 import Game.Vec2 (Vec2, vec)
-import Graphics.Canvas (CanvasElement, CanvasImageSource, Context2D, drawImageFull, getContext2D, tryLoadImage)
+import Graphics.Canvas (CanvasElement, CanvasImageSource, Context2D, drawImageFull, getContext2D, setStrokeStyle, strokeRect, tryLoadImage)
 import Partial.Unsafe (unsafePartial)
 import Uitl (setImageSmoothing)
 import Web.Event.Event (EventType(..))
@@ -117,8 +118,8 @@ drawMaze atlas ctx maze = do
     let (tx /\ ty) = coords tile
     drawImageFull ctx atlas tx ty 8.0 8.0 x y tileSize tileSize
 
-  -- when (tile /= Empty) $ do
-  --   strokeRect ctx { x, y, width: tileSize - 2.0, height: tileSize - 2.0 }
+    when (tile /= Empty) $ do
+      strokeRect ctx { x, y, width: tileSize - 2.0, height: tileSize - 2.0 }
 
   coords :: TileKind -> (Number /\ Number)
   coords WallTL = (16.0 /\ 16.0)
@@ -147,19 +148,24 @@ parseMaze mazeS =
     | c == '!' = WallRight
     | otherwise = Empty
 
-tileAt :: Maze -> (Number /\ Number) -> Maybe TileKind
-tileAt maze (x /\ y) =
-  let
-    col = floor $ x / tileSize
-    row = floor $ y / tileSize
-  in
-    (maze !! row) >>= \r -> (r !! col)
+type Tile =
+  { pos :: Vec2
+  , size :: Number
+  , kind :: TileKind
+  }
 
-isWallAt :: Maze -> (Number /\ Number) -> Boolean
-isWallAt maze pos =
-  case ((/=) Empty) <$> tileAt maze pos of
-    Just res -> res
-    Nothing -> false
+tileAt :: Maze -> Int -> Int -> Maybe Tile
+tileAt maze row col =
+  ((maze !! row) >>= \r -> (r !! col)) <#>
+    \k ->
+      { pos: vec ((toNumber col) * tileSize) ((toNumber row) * tileSize)
+      , size: tileSize
+      , kind: k
+      }
+
+isWall :: TileKind -> Boolean
+isWall Empty = false
+isWall _ = true
 
 data Dir = Up | Left | Down | Right | None
 
@@ -188,21 +194,48 @@ changeDir :: Ref.Ref State -> Dir -> Effect Unit
 changeDir stateRef dir = do
   Ref.modify_ (\s -> s { pacman = s.pacman { moveDir = dir } }) stateRef
 
+type AABB r =
+  { pos :: Vec2
+  , size :: Number
+  | r
+  }
+
+collision :: forall r1 r2. AABB r1 -> AABB r2 -> Boolean
+collision { pos: (x1 /\ y1), size: s1 } { pos: (x2 /\ y2), size: s2 } =
+  x1 < x2 + s2
+    && x1 + s1 > x2
+    && y1 < y2 + s2
+    && y1 + s1 > s2
+
 pacmanUpdate :: Number -> State -> Pureman -> Pureman
-pacmanUpdate dt { maze } pureman@{ animation, pos, moveDir } =
-  pureman { animation = stepAnimation dt animation, pos = updatedPos }
+pacmanUpdate dt { maze } pureman@{ animation, pos, moveDir, size } =
+  pureman { animation = stepAnimation dt animation, pos = pos' }
   where
-  updatedPos =
-    let
-      pos' = case moveDir of
-        Up -> pos + (0.0 /\ -1.0)
-        Down -> pos + (0.0 /\ 1.0)
-        Left -> pos + (-1.0 /\ 0.0)
-        Right -> pos + (1.0 /\ 0.0)
-        None -> pos
-    in
-      if isWallAt maze pos' then pos
-      else pos'
+  tileRow = floor $ (snd pos) / tileSize
+  tileCol = floor $ (fst pos) / tileSize
+  -- find row column of tile we're facing
+  (nextTileRow /\ nextTileCol) = case moveDir of
+    Up -> ((tileRow - 1) /\ tileCol)
+    Down -> ((tileRow + 1) /\ tileCol)
+    Left -> (tileRow /\ (tileCol - 1))
+    Right -> (tileRow /\ (tileCol + 1))
+    None -> (tileRow /\ tileCol)
+  -- What kind of tile are we facing? Is it a wall?
+  nextTile = tileAt maze nextTileRow nextTileCol
+  nextPos = case moveDir of
+    Up -> pos + (0.0 /\ -1.0)
+    Down -> pos + (0.0 /\ 1.0)
+    Left -> pos + (-1.0 /\ 0.0)
+    Right -> pos + (1.0 /\ 0.0)
+    None -> pos
+
+  pacmanHitbox = { pos: nextPos, size }
+
+  pos' = case nextTile of
+    Nothing -> nextPos
+    Just tile' ->
+      if isWall tile'.kind && collision pacmanHitbox tile' then pos
+      else nextPos
 
 handleKeyPress :: Ref.Ref State -> Event -> Effect Unit
 handleKeyPress state event = do
