@@ -4,27 +4,24 @@ module Game.Pureman
 
 import Prelude
 
-import Data.Array ((!!), unsafeIndex)
+import Data.Array (unsafeIndex)
 import Data.DateTime.Instant (unInstant)
 import Data.Foldable (for_)
 import Data.Int (floor, toNumber)
-import Data.Number ((%))
 import Data.Maybe (Maybe(..))
-import Data.String as S
-import Data.String.CodeUnits (toCharArray)
+import Data.Number ((%))
 import Data.Time.Duration (Milliseconds(..))
 import Data.Tuple (fst, snd)
 import Data.Tuple.Nested ((/\), type (/\))
-import Debug as Debug
 import Effect (Effect)
 import Effect.Now as Now
 import Effect.Ref as Ref
 import Game.Animation (Animation, drawAnimation, mkAnimation, stepAnimation)
+import Game.Maze (Maze, TileKind(..), isWall, isWallAt, pacmanMaze, mapSize, tileAt, tileSize)
 import Game.Vec2 (Vec2, vec)
-import Graphics.Canvas (CanvasElement, CanvasImageSource, Context2D, drawImageFull, getContext2D, setStrokeStyle, strokeRect, tryLoadImage)
+import Graphics.Canvas (CanvasElement, CanvasImageSource, Context2D, drawImageFull, getContext2D, tryLoadImage)
 import Partial.Unsafe (unsafePartial)
 import Uitl (setImageSmoothing)
-import Undefined (undefined)
 import Web.Event.Event (EventType(..))
 import Web.Event.EventTarget (addEventListener, eventListener)
 import Web.Event.Internal.Types (Event)
@@ -32,75 +29,8 @@ import Web.HTML.HTMLDocument (toEventTarget)
 import Web.HTML.Window (Window, document, requestAnimationFrame)
 import Web.UIEvent.KeyboardEvent as KE
 
-mapSize :: (Int /\ Int)
-mapSize = (31 /\ 32)
-
-tileSize :: Number
-tileSize = 16.0
-
 loadSpriteSheet :: (Maybe CanvasImageSource -> Effect Unit) -> Effect Unit
 loadSpriteSheet = tryLoadImage "spritesheet.png"
-
---- Representation of the PacMan level 0 maze as a string
---- Taken from the pacman example in https://fable.io/repl/
-mazeString ∷ String
-mazeString =
-  """##/------------7/------------7##
-##|............|!............|##
-##|./__7./___7.|!./___7./__7.|##
-##|o|  !.|   !.|!.|   !.|  !o|##
-##|.L--J.L---J.LJ.L---J.L--J.|##
-##|..........................|##
-##|./__7./7./______7./7./__7.|##
-##|.L--J.|!.L--7/--J.|!.L--J.|##
-##|......|!....|!....|!......|##
-##L____7.|L__7 |! /__J!./____J##
-#######!.|/--J LJ L--7!.|#######
-#######!.|!          |!.|#######
-#######!.|! /__==__7 |!.|#######
-/------J.LJ |      ! LJ.L------7
-|#######.   | **** !   .#######!
-L______7./7 |      ! /7./______J
-#######!.|! L______J |!.|#######
-#######!.|!          |!.|#######
-#######!.|! /______7 |!.|#######
-##/----J.LJ L--7/--J LJ.L----7##
-##|............|!............|##
-##|./__7./___7.|!./___7./__7.|##
-##|.L-7!.L---J.LJ.L---J.|/-J.|##
-##|o..|!.......<>.......|!..o|##
-##L_7.|!./7./______7./7.|!./_J##
-##/-J.LJ.|!.L--7/--J.|!.LJ.L-7##
-##|......|!....|!....|!......|##
-##|./____JL__7.|!./__JL____7.|##
-##|.L--------J.LJ.L--------J.|##
-##|..........................|##
-##L--------------------------J##"""
-
-data TileKind
-  = Empty
-  | WallLeft
-  | WallRight
-  | WallTop
-  | WallBottom
-  | WallTR
-  | WallTL
-  | WallBR
-  | WallBL
-
-derive instance eqTileKind :: Eq TileKind
--- instance showTileKind :: Show TileKind where
---   show Empty = "Empty"
---   show WallLeft = "WallLeft"
---   show WallRight = "WallRight"
---   show WallTop = "WallTop"
---   show WallBottom = "WallBottom"
---   show WallTR = "WallTR"
---   show WallTL = "WallTL"
---   show WallBR = "WallBR"
---   show WallBL = "WallBL"
-
-type Maze = Array (Array TileKind)
 
 infixl 5 unsafeIndex as <!!>
 
@@ -122,7 +52,6 @@ drawMaze atlas ctx maze = do
   forM_ 0 nRows $ \row ->
     forM_ 0 nCols $ \col ->
       do
-        -- log $ show (row /\ col)
         -- The number of rows and columns in the maze are constants.
         -- I don't want to play type tetris with a bunch of `Maybe`s for
         -- no good reason. This `unsafePartial` is justified, IMO.
@@ -139,9 +68,9 @@ drawMaze atlas ctx maze = do
     let (tx /\ ty) = coords tile
     drawImageFull ctx atlas tx ty 8.0 8.0 x y tileSize tileSize
 
-    when (tile /= Empty) $ do
-      setStrokeStyle ctx "red"
-      strokeRect ctx { x, y, width: tileSize - 2.0, height: tileSize - 2.0 }
+  -- when (tile /= WallNone) $ do
+  --   setStrokeStyle ctx "red"
+  --   strokeRect ctx { x, y, width: tileSize - 2.0, height: tileSize - 2.0 }
 
   coords :: TileKind -> (Number /\ Number)
   coords WallTL = (16.0 /\ 16.0)
@@ -152,47 +81,7 @@ drawMaze atlas ctx maze = do
   coords WallBR = (40.0 /\ 32.0)
   coords WallLeft = (16.0 /\ 24.0)
   coords WallRight = (40.0 /\ 24.0)
-  coords Empty = (0.0 /\ 80.0)
-
-parseMaze :: String -> Maze
-parseMaze mazeS =
-  map parseTile <<< toCharArray <$> rows
-  where
-  rows = S.split (S.Pattern "\n") mazeS
-  parseTile c
-    | c == '-' = WallTop
-    | c == '_' = WallBottom
-    | c == '/' = WallTL
-    | c == '7' = WallTR
-    | c == 'L' = WallBL
-    | c == 'J' = WallBR
-    | c == '|' = WallLeft
-    | c == '!' = WallRight
-    | otherwise = Empty
-
-type Tile =
-  { pos :: Vec2
-  , size :: Number
-  , kind :: TileKind
-  }
-
-tileAt :: Maze -> Int -> Int -> Maybe Tile
-tileAt maze row col =
-  ((maze !! row) >>= \r -> (r !! col)) <#>
-    \k ->
-      { pos: vec ((toNumber col) * tileSize) ((toNumber row) * tileSize)
-      , size: tileSize
-      , kind: k
-      }
-
-isWall :: TileKind -> Boolean
-isWall Empty = false
-isWall _ = true
-
-isWallAt :: Maze -> Int -> Int -> Boolean
-isWallAt maze row col = case ((maze !! row) >>= (\r -> r !! col)) of
-  Just w -> isWall w
-  Nothing -> false
+  coords WallNone = (0.0 /\ 80.0)
 
 data Dir = Up | Left | Down | Right | None
 
@@ -241,14 +130,15 @@ collision { pos: (x1 /\ y1), size: s1 } { pos: (x2 /\ y2), size: s2 } =
     && y1 + s1 > y2
 
 speed :: Number
-speed = 0.5
+speed = 1.0
 
 moveVector :: Dir -> Vec2
-moveVector Up = vec 0.0 (-speed)
-moveVector Down = vec 0.0 speed
-moveVector Left = vec (-speed) 0.0
-moveVector Right = vec speed 0.0
-moveVector None = vec 0.0 0.0
+moveVector dir = case dir of
+  Up -> vec 0.0 (-speed)
+  Down -> vec 0.0 speed
+  Left -> vec (-speed) 0.0
+  Right -> vec speed 0.0
+  None -> vec 0.0 0.0
 
 aligned :: Number -> Boolean
 aligned n = (n % tileSize) <= 0.5
@@ -274,9 +164,9 @@ pacmanUpdate dt { maze } pureman@{ animation, pos, moveDir, turnDir } =
     , turnDir = turnDir'
     }
   where
-
+  -- get current row-column from Pacman's x-y position
   (row /\ col) = toRowCol pos
-  -- can we turn in the turn direction?
+  -- can we turn in the turnDir direction?
   canTurn =
     -- pacman cannot turn unless aligned to a grid cell
     if not $ aligned (fst pos) && aligned (snd pos) then false
@@ -319,8 +209,9 @@ handleKeyPress state event = do
 pacmanDraw :: Context2D -> Pureman -> Effect Unit
 pacmanDraw ctx { animation, pos, size } = do
   drawAnimation ctx animation (pos - ((size / 2.0) /\ (size / 2.0)))
-  setStrokeStyle ctx "green"
-  strokeRect ctx { x: fst pos, y: snd pos, width: size, height: size }
+
+-- setStrokeStyle ctx "green"
+-- strokeRect ctx { x: fst pos, y: snd pos, width: size, height: size }
 
 type State =
   { pacman :: Pureman
@@ -335,7 +226,7 @@ type Game =
 newState :: Pureman -> State
 newState pacman =
   { pacman
-  , maze: parseMaze mazeString
+  , maze: pacmanMaze
   }
 
 stepState :: Number -> State -> State
