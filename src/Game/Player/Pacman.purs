@@ -34,4 +34,3 @@ newPacman atlas =
 
   where
   animations = makePacmanAnimations atlas
-

@@ -3,18 +3,28 @@ module Game.Common
   , aligned
   , collision
   , dir2Vector
+  , oppositeDir
+  , pair2Dir
   , tileSize
   ) where
 
 import Prelude
 
-import Data.Tuple.Nested ((/\))
+import Data.Tuple.Nested ((/\), type (/\))
 import Data.Number ((%))
 import Game.Vec2 (Vec2, vec)
 
 data Dir = Up | Left | Down | Right | None
 
 derive instance eqDir :: Eq Dir
+
+oppositeDir :: Dir -> Dir
+oppositeDir dir = case dir of
+  Left -> Right
+  Right -> Left
+  Up -> Down
+  Down -> Up
+  None -> None
 
 tileSize :: Number
 tileSize = 16.0
@@ -36,6 +46,14 @@ dir2Vector dir = case dir of
   Left -> vec (-speed) 0.0
   Right -> vec speed 0.0
   None -> vec 0.0 0.0
+
+pair2Dir :: (Int /\ Int) -> Dir
+pair2Dir pair = case pair of
+  (1 /\ 0) -> Down
+  (-1 /\ 0) -> Up
+  (0 /\ 1) -> Right
+  (0 /\ -1) -> Left
+  _ -> None
 
 aligned :: Number -> Boolean
 aligned n = (n % tileSize) <= 0.5

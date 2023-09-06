@@ -2,6 +2,7 @@ module Game.Maze
   ( Maze
   , Tile
   , TileKind(..)
+  , at
   , isWall
   , isWallAt
   , mapSize
@@ -106,6 +107,9 @@ tileAt maze row col =
       { pos: vec ((toNumber col) * tileSize) ((toNumber row) * tileSize)
       , kind: k
       }
+
+at :: Maze -> Int -> Int -> Maybe TileKind
+at maze row col = (maze !! row) >>= (flip (!!) col)
 
 isWall :: TileKind -> Boolean
 isWall WallNone = false
