@@ -1,4 +1,6 @@
-module Game.Pureman (newGame) where
+module Game.Pureman
+  ( newGame
+  ) where
 
 import Prelude
 
@@ -6,6 +8,7 @@ import Data.Array ((!!), unsafeIndex)
 import Data.DateTime.Instant (unInstant)
 import Data.Foldable (for_)
 import Data.Int (floor, toNumber)
+import Data.Number ((%))
 import Data.Maybe (Maybe(..))
 import Data.String as S
 import Data.String.CodeUnits (toCharArray)
@@ -18,9 +21,10 @@ import Effect.Now as Now
 import Effect.Ref as Ref
 import Game.Animation (Animation, drawAnimation, mkAnimation, stepAnimation)
 import Game.Vec2 (Vec2, vec)
-import Graphics.Canvas (CanvasElement, CanvasImageSource, Context2D, drawImageFull, getContext2D, strokeRect, tryLoadImage)
+import Graphics.Canvas (CanvasElement, CanvasImageSource, Context2D, drawImageFull, getContext2D, setStrokeStyle, strokeRect, tryLoadImage)
 import Partial.Unsafe (unsafePartial)
 import Uitl (setImageSmoothing)
+import Undefined (undefined)
 import Web.Event.Event (EventType(..))
 import Web.Event.EventTarget (addEventListener, eventListener)
 import Web.Event.Internal.Types (Event)
@@ -29,7 +33,7 @@ import Web.HTML.Window (Window, document, requestAnimationFrame)
 import Web.UIEvent.KeyboardEvent as KE
 
 mapSize :: (Int /\ Int)
-mapSize = (30 /\ 32)
+mapSize = (31 /\ 32)
 
 tileSize :: Number
 tileSize = 16.0
@@ -54,9 +58,9 @@ mazeString =
 #######!.|/--J LJ L--7!.|#######
 #######!.|!          |!.|#######
 #######!.|! /__==__7 |!.|#######
--------J.LJ |      ! LJ.L-------
-########.   | **** !   .########
-_______7./7 |      ! /7./_______
+/------J.LJ |      ! LJ.L------7
+|#######.   | **** !   .#######!
+L______7./7 |      ! /7./______J
 #######!.|! L______J |!.|#######
 #######!.|!          |!.|#######
 #######!.|! /______7 |!.|#######
@@ -85,40 +89,58 @@ data TileKind
   | WallBL
 
 derive instance eqTileKind :: Eq TileKind
+-- instance showTileKind :: Show TileKind where
+--   show Empty = "Empty"
+--   show WallLeft = "WallLeft"
+--   show WallRight = "WallRight"
+--   show WallTop = "WallTop"
+--   show WallBottom = "WallBottom"
+--   show WallTR = "WallTR"
+--   show WallTL = "WallTL"
+--   show WallBR = "WallBR"
+--   show WallBL = "WallBL"
 
 type Maze = Array (Array TileKind)
 
 infixl 5 unsafeIndex as <!!>
 
+forM_ :: forall m a. Monad m => Int -> Int -> (Int -> m a) -> m Unit
+forM_ from to callback =
+  go from
+  where
+  go x = do
+    if (x < to) then do
+      void $ callback x
+      go (x + 1)
+    else pure unit
+
 drawMaze :: CanvasImageSource -> Context2D -> Maze -> Effect Unit
 drawMaze atlas ctx maze = do
-  go 0 0
+  let
+    nRows = fst mapSize
+    nCols = snd mapSize
+  forM_ 0 nRows $ \row ->
+    forM_ 0 nCols $ \col ->
+      do
+        -- log $ show (row /\ col)
+        -- The number of rows and columns in the maze are constants.
+        -- I don't want to play type tetris with a bunch of `Maybe`s for
+        -- no good reason. This `unsafePartial` is justified, IMO.
+        let
+          tile = unsafePartial $ maze <!!> row <!!> col
+          x = (toNumber col) * tileSize
+          y = (toNumber row) * tileSize
+
+        drawTile x y tile
+
   where
-  go :: Int -> Int -> Effect Unit
-  go row col = do
-    -- The number of rows and columns in the maze are constants.
-    -- I don't want to play type tetris with a bunch of `Maybe`s for
-    -- no good reason. This `unsafePartial` is justified, IMO.
-    let
-      tile = unsafePartial $ maze <!!> row <!!> col
-      x = (toNumber col) * tileSize
-      y = (toNumber row) * tileSize
-
-    drawTile x y tile
-
-    let
-      (row' /\ col') =
-        if col >= (snd mapSize) - 1 then ((row + 1) /\ 0)
-        else (row /\ (col + 1))
-
-    when (row' < fst mapSize) $ go row' col'
-
   drawTile :: Number -> Number -> TileKind -> Effect Unit
   drawTile x y tile = do
     let (tx /\ ty) = coords tile
     drawImageFull ctx atlas tx ty 8.0 8.0 x y tileSize tileSize
 
     when (tile /= Empty) $ do
+      setStrokeStyle ctx "red"
       strokeRect ctx { x, y, width: tileSize - 2.0, height: tileSize - 2.0 }
 
   coords :: TileKind -> (Number /\ Number)
@@ -167,14 +189,21 @@ isWall :: TileKind -> Boolean
 isWall Empty = false
 isWall _ = true
 
+isWallAt :: Maze -> Int -> Int -> Boolean
+isWallAt maze row col = case ((maze !! row) >>= (\r -> r !! col)) of
+  Just w -> isWall w
+  Nothing -> false
+
 data Dir = Up | Left | Down | Right | None
+
+derive instance eqDir :: Eq Dir
 
 type Pureman =
   { animation :: Animation
   -- current movement direction
   , moveDir :: Dir
   -- direction in which the player wants pacman to move next
-  , nextMoveDir :: Dir
+  , turnDir :: Dir
   , pos :: Vec2
   , size :: Number -- hitbox size in pixels
   }
@@ -182,10 +211,10 @@ type Pureman =
 newPacman :: CanvasImageSource -> Pureman
 newPacman atlas =
   { animation: mkAnimation atlas frames 120.0 1.8
-  , pos: vec 256.0 368.0
+  , pos: vec (tileSize * 16.0) (tileSize * 23.0)
   , size: tileSize
   , moveDir: None
-  , nextMoveDir: None
+  , turnDir: None
   }
   where
   frames =
@@ -196,7 +225,7 @@ newPacman atlas =
 
 changeDir :: Ref.Ref State -> Dir -> Effect Unit
 changeDir stateRef dir = do
-  Ref.modify_ (\s -> s { pacman = s.pacman { nextMoveDir = dir } }) stateRef
+  Ref.modify_ (\s -> s { pacman = s.pacman { turnDir = dir } }) stateRef
 
 type AABB r =
   { pos :: Vec2
@@ -209,56 +238,72 @@ collision { pos: (x1 /\ y1), size: s1 } { pos: (x2 /\ y2), size: s2 } =
   x1 < x2 + s2
     && x1 + s1 > x2
     && y1 < y2 + s2
-    && y1 + s1 > s2
+    && y1 + s1 > y2
 
---- Move Pacman in a given direction.
---- If movement is possible, return the new position vector.
---- Otherwise, return `Nothing`
-moveInDir :: State -> Pureman -> Dir -> Maybe Vec2
-moveInDir _ _ None = Nothing
-moveInDir { maze } pacman@{ pos } dir =
-  let
-    tileRow = floor $ (snd pos) / tileSize
-    tileCol = floor $ (fst pos) / tileSize
-    -- find row column of tile we're facing
-    (nextTileRow /\ nextTileCol) = case dir of
-      Up -> ((tileRow - 1) /\ tileCol)
-      Down -> ((tileRow + 1) /\ tileCol)
-      Left -> (tileRow /\ (tileCol - 1))
-      Right -> (tileRow /\ (tileCol + 1))
-      None -> (tileRow /\ tileCol)
-    -- What kind of tile are we facing? Is it a wall?
-    nextTile = tileAt maze nextTileRow nextTileCol
-    nextPos = case dir of
-      Up -> pos + (0.0 /\ -1.0)
-      Down -> pos + (0.0 /\ 1.0)
-      Left -> pos + (-1.0 /\ 0.0)
-      Right -> pos + (1.0 /\ 0.0)
-      None -> pos
-  in
-    case nextTile of
-      Just tile ->
-        let
-          pacmanHitbox = { pos: nextPos, size: pacman.size }
-        in
-          if isWall tile.kind && collision pacmanHitbox tile then Nothing
-          else Just nextPos
-      Nothing -> Nothing
+speed :: Number
+speed = 0.5
+
+moveVector :: Dir -> Vec2
+moveVector Up = vec 0.0 (-speed)
+moveVector Down = vec 0.0 speed
+moveVector Left = vec (-speed) 0.0
+moveVector Right = vec speed 0.0
+moveVector None = vec 0.0 0.0
+
+aligned :: Number -> Boolean
+aligned n = (n % tileSize) <= 0.5
+
+turnRowCol :: Int -> Int -> Dir -> (Int /\ Int)
+turnRowCol r c dir =
+  case dir of
+    Up -> ((r - 1) /\ c)
+    Down -> ((r + 1) /\ c)
+    Left -> (r /\ (c - 1))
+    Right -> (r /\ (c + 1))
+    None -> (r /\ c)
+
+toRowCol :: Vec2 -> (Int /\ Int)
+toRowCol (x /\ y) = (floor $ y / tileSize) /\ (floor $ x / tileSize)
 
 pacmanUpdate :: Number -> State -> Pureman -> Pureman
-pacmanUpdate dt state pureman@{ animation, pos, moveDir, nextMoveDir } =
+pacmanUpdate dt { maze } pureman@{ animation, pos, moveDir, turnDir } =
   pureman
     { animation = stepAnimation dt animation
-    , pos = pos'
+    , pos = move moveDir'
     , moveDir = moveDir'
-    , nextMoveDir = nextMoveDir'
+    , turnDir = turnDir'
     }
   where
-  (pos' /\ moveDir' /\ nextMoveDir') = case moveInDir state pureman nextMoveDir of
-    Just posAfterTurn -> (posAfterTurn /\ nextMoveDir /\ None)
-    Nothing -> case moveInDir state pureman moveDir of
-      Just p -> (p /\ moveDir /\ nextMoveDir)
-      Nothing -> (pos /\ moveDir /\ nextMoveDir)
+
+  (row /\ col) = toRowCol pos
+  -- can we turn in the turn direction?
+  canTurn =
+    -- pacman cannot turn unless aligned to a grid cell
+    if not $ aligned (fst pos) && aligned (snd pos) then false
+    else
+      let
+        -- pacman cannot turn if the tile after turning is a wall
+        nextRow /\ nextCol = turnRowCol row col turnDir
+      in
+        not $ isWallAt maze nextRow nextCol
+
+  (moveDir' /\ turnDir') =
+    if turnDir /= None && canTurn then (turnDir /\ None)
+    else (moveDir /\ turnDir)
+
+  move :: Dir -> Vec2
+  move dir =
+    let
+      dpos = moveVector dir
+      newPos = pos + dpos
+      newHitbox = { pos: newPos, size: tileSize }
+      (row' /\ col') = turnRowCol row col dir
+    in
+      case tileAt maze row' col' of
+        Just tile ->
+          if (isWall tile.kind && collision newHitbox tile) then pos
+          else newPos
+        Nothing -> pos
 
 handleKeyPress :: Ref.Ref State -> Event -> Effect Unit
 handleKeyPress state event = do
@@ -274,9 +319,8 @@ handleKeyPress state event = do
 pacmanDraw :: Context2D -> Pureman -> Effect Unit
 pacmanDraw ctx { animation, pos, size } = do
   drawAnimation ctx animation (pos - ((size / 2.0) /\ (size / 2.0)))
-
--- setStrokeStyle ctx "red"
--- strokeRect ctx { x: fst pos, y: snd pos, width: size, height: size }
+  setStrokeStyle ctx "green"
+  strokeRect ctx { x: fst pos, y: snd pos, width: size, height: size }
 
 type State =
   { pacman :: Pureman
