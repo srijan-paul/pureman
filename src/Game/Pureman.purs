@@ -16,10 +16,11 @@ import Data.Tuple.Nested ((/\), type (/\))
 import Effect (Effect)
 import Effect.Now as Now
 import Effect.Ref as Ref
-import Game.Animation (Animation, drawAnimation, mkAnimation, stepAnimation)
+import Game.Animation (Animation, drawAnimation, stepAnimation)
 import Game.Maze (Maze, TileKind(..), isWall, isWallAt, pacmanMaze, mapSize, tileAt, tileSize)
+import Game.Sprite (PacmanAnims, loadSpriteSheet, makePacmanAnimations)
 import Game.Vec2 (Vec2, vec)
-import Graphics.Canvas (CanvasElement, CanvasImageSource, Context2D, drawImageFull, getContext2D, tryLoadImage)
+import Graphics.Canvas (CanvasElement, CanvasImageSource, Context2D, drawImageFull, getContext2D)
 import Partial.Unsafe (unsafePartial)
 import Uitl (setImageSmoothing)
 import Web.Event.Event (EventType(..))
@@ -28,9 +29,6 @@ import Web.Event.Internal.Types (Event)
 import Web.HTML.HTMLDocument (toEventTarget)
 import Web.HTML.Window (Window, document, requestAnimationFrame)
 import Web.UIEvent.KeyboardEvent as KE
-
-loadSpriteSheet :: (Maybe CanvasImageSource -> Effect Unit) -> Effect Unit
-loadSpriteSheet = tryLoadImage "spritesheet.png"
 
 infixl 5 unsafeIndex as <!!>
 
@@ -95,22 +93,21 @@ type Pureman =
   , turnDir :: Dir
   , pos :: Vec2
   , size :: Number -- hitbox size in pixels
+  , animations :: PacmanAnims
   }
 
 newPacman :: CanvasImageSource -> Pureman
 newPacman atlas =
-  { animation: mkAnimation atlas frames 120.0 1.8
+  { animations
   , pos: vec (tileSize * 16.0) (tileSize * 23.0)
   , size: tileSize
   , moveDir: None
   , turnDir: None
+  , animation: animations.right
   }
+
   where
-  frames =
-    [ { x: 456.0, y: 0.0, w: 16.0, h: 16.0 }
-    , { x: 472.0, y: 0.0, w: 16.0, h: 16.0 }
-    , { x: 488.0, y: 0.0, w: 16.0, h: 16.0 }
-    ]
+  animations = makePacmanAnimations atlas
 
 changeDir :: Ref.Ref State -> Dir -> Effect Unit
 changeDir stateRef dir = do
@@ -155,10 +152,18 @@ turnRowCol r c dir =
 toRowCol :: Vec2 -> (Int /\ Int)
 toRowCol (x /\ y) = (floor $ y / tileSize) /\ (floor $ x / tileSize)
 
+dirToAnimation :: PacmanAnims -> Dir -> Animation
+dirToAnimation anims dir = case dir of
+  Left -> anims.left
+  Right -> anims.right
+  Up -> anims.up
+  Down -> anims.down
+  _ -> anims.right
+
 pacmanUpdate :: Number -> State -> Pureman -> Pureman
 pacmanUpdate dt { maze } pureman@{ animation, pos, moveDir, turnDir } =
   pureman
-    { animation = stepAnimation dt animation
+    { animation = stepAnimation dt animation'
     , pos = move moveDir'
     , moveDir = moveDir'
     , turnDir = turnDir'
@@ -177,9 +182,9 @@ pacmanUpdate dt { maze } pureman@{ animation, pos, moveDir, turnDir } =
       in
         not $ isWallAt maze nextRow nextCol
 
-  (moveDir' /\ turnDir') =
-    if turnDir /= None && canTurn then (turnDir /\ None)
-    else (moveDir /\ turnDir)
+  (moveDir' /\ turnDir' /\ animation') =
+    if turnDir /= None && canTurn then (turnDir /\ None /\ (dirToAnimation pureman.animations turnDir))
+    else (moveDir /\ turnDir /\ animation)
 
   move :: Dir -> Vec2
   move dir =
