@@ -18,7 +18,7 @@ import Effect.Now as Now
 import Effect.Ref as Ref
 import Game.Animation (Animation, drawAnimation, mkAnimation, stepAnimation)
 import Game.Vec2 (Vec2, vec)
-import Graphics.Canvas (CanvasElement, CanvasImageSource, Context2D, drawImageFull, getContext2D, setStrokeStyle, strokeRect, tryLoadImage)
+import Graphics.Canvas (CanvasElement, CanvasImageSource, Context2D, drawImageFull, getContext2D, strokeRect, tryLoadImage)
 import Partial.Unsafe (unsafePartial)
 import Uitl (setImageSmoothing)
 import Web.Event.Event (EventType(..))
@@ -171,7 +171,10 @@ data Dir = Up | Left | Down | Right | None
 
 type Pureman =
   { animation :: Animation
+  -- current movement direction
   , moveDir :: Dir
+  -- direction in which the player wants pacman to move next
+  , nextMoveDir :: Dir
   , pos :: Vec2
   , size :: Number -- hitbox size in pixels
   }
@@ -182,6 +185,7 @@ newPacman atlas =
   , pos: vec 256.0 368.0
   , size: tileSize
   , moveDir: None
+  , nextMoveDir: None
   }
   where
   frames =
@@ -192,7 +196,7 @@ newPacman atlas =
 
 changeDir :: Ref.Ref State -> Dir -> Effect Unit
 changeDir stateRef dir = do
-  Ref.modify_ (\s -> s { pacman = s.pacman { moveDir = dir } }) stateRef
+  Ref.modify_ (\s -> s { pacman = s.pacman { nextMoveDir = dir } }) stateRef
 
 type AABB r =
   { pos :: Vec2
@@ -207,35 +211,54 @@ collision { pos: (x1 /\ y1), size: s1 } { pos: (x2 /\ y2), size: s2 } =
     && y1 < y2 + s2
     && y1 + s1 > s2
 
+--- Move Pacman in a given direction.
+--- If movement is possible, return the new position vector.
+--- Otherwise, return `Nothing`
+moveInDir :: State -> Pureman -> Dir -> Maybe Vec2
+moveInDir _ _ None = Nothing
+moveInDir { maze } pacman@{ pos } dir =
+  let
+    tileRow = floor $ (snd pos) / tileSize
+    tileCol = floor $ (fst pos) / tileSize
+    -- find row column of tile we're facing
+    (nextTileRow /\ nextTileCol) = case dir of
+      Up -> ((tileRow - 1) /\ tileCol)
+      Down -> ((tileRow + 1) /\ tileCol)
+      Left -> (tileRow /\ (tileCol - 1))
+      Right -> (tileRow /\ (tileCol + 1))
+      None -> (tileRow /\ tileCol)
+    -- What kind of tile are we facing? Is it a wall?
+    nextTile = tileAt maze nextTileRow nextTileCol
+    nextPos = case dir of
+      Up -> pos + (0.0 /\ -1.0)
+      Down -> pos + (0.0 /\ 1.0)
+      Left -> pos + (-1.0 /\ 0.0)
+      Right -> pos + (1.0 /\ 0.0)
+      None -> pos
+  in
+    case nextTile of
+      Just tile ->
+        let
+          pacmanHitbox = { pos: nextPos, size: pacman.size }
+        in
+          if isWall tile.kind && collision pacmanHitbox tile then Nothing
+          else Just nextPos
+      Nothing -> Nothing
+
 pacmanUpdate :: Number -> State -> Pureman -> Pureman
-pacmanUpdate dt { maze } pureman@{ animation, pos, moveDir, size } =
-  pureman { animation = stepAnimation dt animation, pos = pos' }
+pacmanUpdate dt state pureman@{ animation, pos, moveDir, nextMoveDir } =
+  pureman
+    { animation = stepAnimation dt animation
+    , pos = pos'
+    , moveDir = moveDir'
+    , nextMoveDir = nextMoveDir'
+    }
   where
-  tileRow = floor $ (snd pos) / tileSize
-  tileCol = floor $ (fst pos) / tileSize
-  -- find row column of tile we're facing
-  (nextTileRow /\ nextTileCol) = case moveDir of
-    Up -> ((tileRow - 1) /\ tileCol)
-    Down -> ((tileRow + 1) /\ tileCol)
-    Left -> (tileRow /\ (tileCol - 1))
-    Right -> (tileRow /\ (tileCol + 1))
-    None -> (tileRow /\ tileCol)
-  -- What kind of tile are we facing? Is it a wall?
-  nextTile = tileAt maze nextTileRow nextTileCol
-  nextPos = case moveDir of
-    Up -> pos + (0.0 /\ -1.0)
-    Down -> pos + (0.0 /\ 1.0)
-    Left -> pos + (-1.0 /\ 0.0)
-    Right -> pos + (1.0 /\ 0.0)
-    None -> pos
-
-  pacmanHitbox = { pos: nextPos, size }
-
-  pos' = case nextTile of
-    Nothing -> nextPos
-    Just tile' ->
-      if isWall tile'.kind && collision pacmanHitbox tile' then pos
-      else nextPos
+  (pos' /\ moveDir' /\ nextMoveDir') = case moveInDir state pureman nextMoveDir of
+    Just posAfterTurn -> (posAfterTurn /\ nextMoveDir /\ None)
+    Nothing -> case moveInDir state pureman moveDir of
+      Just p -> (p /\ moveDir /\ nextMoveDir)
+      Nothing -> (pos /\ moveDir /\ nextMoveDir)
 
 handleKeyPress :: Ref.Ref State -> Event -> Effect Unit
 handleKeyPress state event = do
