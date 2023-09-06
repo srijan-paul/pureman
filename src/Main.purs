@@ -6,7 +6,6 @@ import Data.Foldable (for_)
 import Effect (Effect)
 import Game.Pureman (newGame)
 import Graphics.Canvas (getCanvasElementById)
-import Web.DOM.NonElementParentNode (getElementById)
 import Web.HTML (window)
 
 main :: Effect Unit

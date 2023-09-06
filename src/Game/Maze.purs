@@ -7,24 +7,23 @@ module Game.Maze
   , mapSize
   , pacmanMaze
   , tileAt
-  , tileSize
+  , toRowCol
+  , turnRowCol
   ) where
 
 import Prelude
 
 import Data.Array ((!!))
+import Data.Int (floor, toNumber)
 import Data.Maybe (Maybe(..))
-import Data.Int (toNumber)
-import Game.Vec2 (Vec2, vec)
 import Data.String as S
 import Data.String.CodeUnits (toCharArray)
 import Data.Tuple.Nested ((/\), type (/\))
+import Game.Common (Dir(..), tileSize)
+import Game.Vec2 (Vec2, vec)
 
 mapSize :: Int /\ Int
 mapSize = 31 /\ 32
-
-tileSize :: Number
-tileSize = 16.0
 
 --- Representation of the PacMan level 0 maze as a string
 --- Taken from the pacman example in https://fable.io/repl/
@@ -97,7 +96,6 @@ pacmanMaze = parseMaze mazeString
 
 type Tile =
   { pos :: Vec2
-  , size :: Number
   , kind :: TileKind
   }
 
@@ -106,7 +104,6 @@ tileAt maze row col =
   ((maze !! row) >>= \r -> (r !! col)) <#>
     \k ->
       { pos: vec ((toNumber col) * tileSize) ((toNumber row) * tileSize)
-      , size: tileSize
       , kind: k
       }
 
@@ -118,3 +115,15 @@ isWallAt :: Maze -> Int -> Int -> Boolean
 isWallAt maze row col = case ((maze !! row) >>= (\r -> r !! col)) of
   Just w -> isWall w
   Nothing -> false
+
+turnRowCol :: Int -> Int -> Dir -> (Int /\ Int)
+turnRowCol r c dir =
+  case dir of
+    Up -> ((r - 1) /\ c)
+    Down -> ((r + 1) /\ c)
+    Left -> (r /\ (c - 1))
+    Right -> (r /\ (c + 1))
+    None -> (r /\ c)
+
+toRowCol :: Vec2 -> (Int /\ Int)
+toRowCol (x /\ y) = (floor $ y / tileSize) /\ (floor $ x / tileSize)

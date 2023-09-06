@@ -1,4 +1,4 @@
-module Game.Animation
+module Game.Graphics.Animation
   ( Animation
   , Frame
   , drawAnimation
@@ -56,5 +56,14 @@ stepAnimation dt anim@{ frames, index, timeSinceLastFrame, frameDuration } =
 drawAnimation :: Context2D -> Animation -> Vec2 -> Effect Unit
 drawAnimation ctx { frames, index, atlas, scale } (x /\ y) = do
   for_ (frames !! index) \frame -> do
-    drawImageFull ctx atlas frame.x frame.y frame.w frame.h x y (frame.w * scale) (frame.h * scale)
-
+    drawImageFull
+      ctx
+      atlas
+      frame.x
+      frame.y
+      frame.w
+      frame.h
+      x
+      y
+      (frame.w * scale)
+      (frame.h * scale)
