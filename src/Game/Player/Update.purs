@@ -44,10 +44,14 @@ pacmanUpdate dt { maze } pureman@{ animation, pos, moveDir, turnDir } =
       in
         not $ isWallAt maze nextRow nextCol
 
+  -- compute the next move/turn directions and animation.
   (moveDir' /\ turnDir' /\ animation') =
+    -- If the player has issued a turn command and we're at a position
+    -- where making a turn is possible, then change direction.
     if turnDir /= None && canTurn then
       (turnDir /\ None /\ (dirToAnimation pureman.animations turnDir))
     else
+      -- Otherwise, continue moving in the direction we're currently facing.
       (moveDir /\ turnDir /\ animation)
 
   move :: Dir -> Vec2

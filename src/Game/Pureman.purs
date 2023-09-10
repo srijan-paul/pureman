@@ -84,7 +84,9 @@ drawMaze atlas ctx maze = do
 
 changeDir :: Ref.Ref State -> Dir -> Effect Unit
 changeDir stateRef dir = do
-  Ref.modify_ (\s -> s { pacman = s.pacman { turnDir = dir } }) stateRef
+  state <- Ref.read stateRef
+  when (state.pacman.moveDir /= dir) $
+    Ref.modify_ (\s -> s { pacman = s.pacman { turnDir = dir } }) stateRef
 
 handleKeyPress :: Ref.Ref State -> Event -> Effect Unit
 handleKeyPress state event = do
