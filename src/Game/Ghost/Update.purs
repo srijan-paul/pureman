@@ -4,20 +4,16 @@ import Prelude
 
 import Data.Array (filter, sortBy, (!!))
 import Data.Maybe (Maybe(..))
-import Data.Tuple (Tuple, fst, snd)
 import Data.Tuple.Nested ((/\), type (/\))
-import Debug as Debug
 import Effect (Effect)
-import Game.Common (Dir, aligned, collision, dir2Vector, oppositeDir, pair2Dir, tileSize)
+import Game.Common (oppositeDir, pair2Dir, tileSize)
+import Game.Entity (canTurn, move)
 import Game.Ghost (Ghost)
 import Game.Graphics.Animation (drawAnimation, stepAnimation)
 import Game.Graphics.Sprite (dirToAnimation)
-import Game.Maze (Maze, at, isWall, isWallAt, tileAt, toRowCol, turnRowCol)
+import Game.Maze (at, isWall, toRowCol)
 import Game.State (State)
-import Game.Vec2 (Vec2)
 import Graphics.Canvas (Context2D)
-
-type TilePosition = Tuple Int Int
 
 --- Compute distance between two tiles.
 tileDist :: Int /\ Int -> Int /\ Int -> Int
@@ -27,23 +23,8 @@ tileDist (r1 /\ c1) (r2 /\ c2) =
   dr = r2 - r1
   dc = c2 - c1
 
-move :: Maze -> Int -> Int -> Vec2 -> Dir -> Vec2
-move maze row col pos dir =
-  let
-    dpos = dir2Vector dir
-    newPos = pos + dpos
-    (row' /\ col') = turnRowCol row col dir
-  in
-    case tileAt maze row' col' of
-      Just tile ->
-        if (isWall tile.kind && collision newPos tile.pos) then
-          pos
-        else
-          newPos
-      Nothing -> pos
-
 updateGhost :: Number -> State -> Ghost -> Ghost
-updateGhost dt { maze, pacman } ghost@{ pos, animations, moveDir, turnDir } =
+updateGhost dt { maze, pacman } ghost@{ pos, animations, moveDir, activeAnimation, ai } =
   ghost
     { activeAnimation = stepAnimation dt activeAnimation'
     , pos = move maze row col ghost.pos moveDir'
@@ -51,20 +32,8 @@ updateGhost dt { maze, pacman } ghost@{ pos, animations, moveDir, turnDir } =
     }
 
   where
-  pacmanPos = toRowCol pacman.pos
+  targetTile = ai pacman
   (row /\ col) = toRowCol ghost.pos
-
-  --- TODO: this helper is duplicated in player and ghost's code.
-  --- refactor this out into its own file.
-  canTurn =
-    -- ghost cannot turn unless aligned to a grid cell
-    if not $ aligned (fst pos) && aligned (snd pos) then false
-    else
-      let
-        -- ghost cannot turn if the tile in turn direction is a wall
-        nextRow /\ nextCol = turnRowCol row col turnDir
-      in
-        not $ isWallAt maze nextRow nextCol
 
   -- list of tile coordinates that ghost can move to
   candidateTiles =
@@ -79,7 +48,7 @@ updateGhost dt { maze, pacman } ghost@{ pos, animations, moveDir, turnDir } =
 
   sortedTiles =
     let
-      cmp a b = compare (tileDist pacmanPos a) (tileDist pacmanPos b)
+      cmp a b = compare (tileDist targetTile a) (tileDist targetTile b)
     in
       sortBy cmp candidateTiles
 
@@ -88,10 +57,11 @@ updateGhost dt { maze, pacman } ghost@{ pos, animations, moveDir, turnDir } =
       ((/=) $ oppositeDir moveDir) $
       (pair2Dir <<< (flip (-) (row /\ col))) <$> sortedTiles
 
-  moveDir' = case possibleDirs !! 0 of
-    Just dir -> if canTurn then dir else moveDir
-    Nothing -> moveDir
-  activeAnimation' = dirToAnimation animations moveDir'
+  (moveDir' /\ activeAnimation') = case possibleDirs !! 0 of
+    Just dir ->
+      if canTurn maze row col pos dir then (dir /\ dirToAnimation animations dir)
+      else (moveDir /\ activeAnimation)
+    Nothing -> (moveDir /\ activeAnimation)
 
 drawGhost :: Context2D -> Ghost -> Effect Unit
 drawGhost ctx { pos, activeAnimation } =

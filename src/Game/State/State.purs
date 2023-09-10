@@ -5,7 +5,7 @@ module Game.State
   ) where
 
 import Effect.Ref (Ref)
-import Game.Ghost (Ghost, makeBlinky)
+import Game.Ghost (Ghost, makeBlinky, makePinky)
 import Game.Maze (Maze, pacmanMaze)
 import Game.Player.Pacman (Pacman, newPacman)
 import Graphics.Canvas (CanvasImageSource)
@@ -25,6 +25,6 @@ newState :: CanvasImageSource -> State
 newState atlas =
   { pacman: newPacman atlas
   , maze: pacmanMaze
-  , ghosts: [ makeBlinky atlas ]
+  , ghosts: [ makeBlinky atlas, makePinky atlas ]
   }
 

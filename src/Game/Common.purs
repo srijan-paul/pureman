@@ -6,13 +6,25 @@ module Game.Common
   , oppositeDir
   , pair2Dir
   , tileSize
+  , vec
+  , Vec2
+  , dot
   ) where
 
 import Prelude
 
 import Data.Tuple.Nested ((/\), type (/\))
 import Data.Number ((%))
-import Game.Vec2 (Vec2, vec)
+
+type Vec2 = (Number /\ Number)
+
+vec :: Number -> Number -> Vec2
+vec a b = (a /\ b)
+
+dot :: Number -> Vec2 -> Vec2
+dot k (x /\ y) = ((k * x) /\ (k * y))
+
+infixr 5 dot as <.>
 
 data Dir = Up | Left | Down | Right | None
 

@@ -4,6 +4,7 @@ module Game.Graphics.Sprite
   , dirToAnimation
   , loadSpriteSheet
   , makePacmanAnimations
+  , pinkyAnimations
   ) where
 
 import Prelude
@@ -24,12 +25,15 @@ type CharacterAnimations =
   , down :: Animation
   }
 
+ghostFrameDuration :: Number
+ghostFrameDuration = 120.0
+
 makePacmanAnimations :: CanvasImageSource -> CharacterAnimations
 makePacmanAnimations atlas =
-  { left: mkAnimation atlas leftFrames 120.0 2.0
-  , right: mkAnimation atlas rightFrames 120.0 2.0
-  , up: mkAnimation atlas upFrames 120.0 2.0
-  , down: mkAnimation atlas downFrames 120.0 2.0
+  { left: mkAnimation atlas leftFrames 100.0 2.0
+  , right: mkAnimation atlas rightFrames 100.0 2.0
+  , up: mkAnimation atlas upFrames 100.0 2.0
+  , down: mkAnimation atlas downFrames 100.0 2.0
   }
   where
   rightFrames =
@@ -57,10 +61,10 @@ makePacmanAnimations atlas =
 
 blinkyAnimations :: CanvasImageSource -> CharacterAnimations
 blinkyAnimations atlas =
-  { left: mkAnimation atlas leftFrames 120.0 2.0
-  , right: mkAnimation atlas rightFrames 120.0 2.0
-  , up: mkAnimation atlas upFrames 120.0 2.0
-  , down: mkAnimation atlas downFrames 120.0 2.0
+  { left: mkAnimation atlas leftFrames ghostFrameDuration 2.0
+  , right: mkAnimation atlas rightFrames ghostFrameDuration 2.0
+  , up: mkAnimation atlas upFrames ghostFrameDuration 2.0
+  , down: mkAnimation atlas downFrames ghostFrameDuration 2.0
   }
   where
   rightFrames =
@@ -75,11 +79,40 @@ blinkyAnimations atlas =
 
   upFrames =
     [ { x: 520.0, y: 64.0, w: 16.0, h: 16.0 }
-    , { x: 436.0, y: 64.0, w: 16.0, h: 16.0 }
+    , { x: 536.0, y: 64.0, w: 16.0, h: 16.0 }
     ]
   downFrames =
     [ { x: 552.0, y: 64.0, w: 16.0, h: 16.0 }
     , { x: 568.0, y: 64.0, w: 16.0, h: 16.0 }
+    ]
+
+pinkyAnimations :: CanvasImageSource -> CharacterAnimations
+pinkyAnimations atlas =
+  { left: mkAnimation atlas leftFrames frameDuration 2.0
+  , right: mkAnimation atlas rightFrames ghostFrameDuration 2.0
+  , up: mkAnimation atlas upFrames ghostFrameDuration 2.0
+  , down: mkAnimation atlas downFrames ghostFrameDuration 2.0
+  }
+  where
+  frameDuration = 200.0
+
+  rightFrames =
+    [ { x: 456.0, y: 80.0, w: 16.0, h: 16.0 }
+    , { x: 472.0, y: 80.0, w: 16.0, h: 16.0 }
+    ]
+
+  leftFrames =
+    [ { x: 488.0, y: 80.0, w: 16.0, h: 16.0 }
+    , { x: 504.0, y: 80.0, w: 16.0, h: 16.0 }
+    ]
+
+  upFrames =
+    [ { x: 520.0, y: 80.0, w: 16.0, h: 16.0 }
+    , { x: 536.0, y: 80.0, w: 16.0, h: 16.0 }
+    ]
+  downFrames =
+    [ { x: 552.0, y: 80.0, w: 16.0, h: 16.0 }
+    , { x: 568.0, y: 80.0, w: 16.0, h: 16.0 }
     ]
 
 dirToAnimation :: CharacterAnimations -> Dir -> Animation
