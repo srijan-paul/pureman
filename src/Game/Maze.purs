@@ -3,6 +3,7 @@ module Game.Maze
   , Tile
   , TileKind(..)
   , at
+  , foodLocations
   , isWall
   , isWallAt
   , mapSize
@@ -14,14 +15,16 @@ module Game.Maze
 
 import Prelude
 
+import Control.Monad.ST (ST, for, run)
 import Data.Array ((!!))
+import Data.Array.ST as STA
 import Data.Int (floor, toNumber)
 import Data.Maybe (Maybe(..))
 import Data.String as S
 import Data.String.CodeUnits (toCharArray)
+import Data.Tuple (fst, snd)
 import Data.Tuple.Nested ((/\), type (/\))
-import Game.Common (Dir(..), tileSize)
-import Game.Vec2 (Vec2, vec)
+import Game.Common (Dir(..), Vec2, vec, tileSize)
 
 mapSize :: Int /\ Int
 mapSize = 31 /\ 32
@@ -91,6 +94,24 @@ parseMaze mazeS =
     | c == '|' = WallLeft
     | c == '!' = WallRight
     | otherwise = WallNone
+
+foodLocations :: Array (Int /\ Int)
+foodLocations =
+  let
+    grid = toCharArray <$> S.split (S.Pattern "\n") mazeString
+
+    impl :: forall c. ST c (Array (Int /\ Int))
+    impl = do
+      foodTiles <- STA.new
+      for 0 (fst mapSize) $ \r ->
+        for 0 (snd mapSize) $ \c ->
+          case (grid !! r) >>= (flip (!!) c) of
+            Just '.' -> void $ STA.push (r /\ c) foodTiles
+            Just 'o' -> void $ STA.push (r /\ c) foodTiles
+            _ -> pure unit
+      STA.freeze foodTiles
+  in
+    run impl
 
 pacmanMaze :: Maze
 pacmanMaze = parseMaze mazeString

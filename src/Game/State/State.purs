@@ -5,6 +5,7 @@ module Game.State
   ) where
 
 import Effect.Ref (Ref)
+import Game.Food (Food, allFoods)
 import Game.Ghost (Ghost, makeBlinky, makePinky)
 import Game.Maze (Maze, pacmanMaze)
 import Game.Player.Pacman (Pacman, newPacman)
@@ -14,6 +15,7 @@ type State =
   { pacman :: Pacman
   , maze :: Maze
   , ghosts :: Array Ghost
+  , foods :: Array Food
   }
 
 type Game =
@@ -23,8 +25,11 @@ type Game =
 
 newState :: CanvasImageSource -> State
 newState atlas =
-  { pacman: newPacman atlas
-  , maze: pacmanMaze
-  , ghosts: [ makeBlinky atlas, makePinky atlas ]
-  }
-
+  let
+    maze = pacmanMaze
+  in
+    { pacman: newPacman atlas
+    , maze
+    , ghosts: [ makeBlinky atlas, makePinky atlas ]
+    , foods: allFoods
+    }

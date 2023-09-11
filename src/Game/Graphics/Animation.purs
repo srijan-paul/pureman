@@ -12,7 +12,7 @@ import Data.Array (length, (!!))
 import Data.Foldable (for_)
 import Data.Tuple.Nested ((/\))
 import Effect (Effect)
-import Game.Vec2 (Vec2)
+import Game.Common (Vec2)
 import Graphics.Canvas (CanvasImageSource, Context2D, drawImageFull)
 
 -- A frame is an index into a spritesheet.

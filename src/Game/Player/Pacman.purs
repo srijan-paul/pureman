@@ -6,9 +6,8 @@ module Game.Player.Pacman
 import Prelude
 
 import Game.Graphics.Animation (Animation)
-import Game.Common (Dir(..), tileSize)
+import Game.Common (Dir(..), Vec2, vec, tileSize)
 import Game.Graphics.Sprite (CharacterAnimations, makePacmanAnimations)
-import Game.Vec2 (Vec2, vec)
 import Graphics.Canvas (CanvasImageSource)
 
 type Pacman =

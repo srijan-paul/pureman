@@ -1,14 +1,15 @@
 module Game.Common
   ( Dir(..)
+  , Vec2
   , aligned
   , collision
   , dir2Vector
+  , dot
+  , forM_
   , oppositeDir
   , pair2Dir
   , tileSize
   , vec
-  , Vec2
-  , dot
   ) where
 
 import Prelude
@@ -69,3 +70,13 @@ pair2Dir pair = case pair of
 
 aligned :: Number -> Boolean
 aligned n = (n % tileSize) <= 0.5
+
+forM_ :: forall m a. Monad m => Int -> Int -> (Int -> m a) -> m Unit
+forM_ from to callback =
+  go from
+  where
+  go x =
+    if (x < to) then do
+      void $ callback x
+      go (x + 1)
+    else pure unit

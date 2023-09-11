@@ -13,9 +13,8 @@ import Game.Graphics.Animation (Animation)
 import Game.Graphics.Sprite (CharacterAnimations, blinkyAnimations, pinkyAnimations)
 import Game.Maze (toRowCol)
 import Game.Player.Pacman (Pacman)
-import Game.Vec2 (Vec2, vec)
+import Game.Common (Vec2, vec)
 import Graphics.Canvas (CanvasImageSource)
-import Undefined (undefined)
 
 -- Given pacman's current location, return a target tile.
 type ControlScheme = Pacman -> (Int /\ Int)

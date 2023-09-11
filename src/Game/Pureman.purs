@@ -14,7 +14,8 @@ import Data.Tuple.Nested ((/\), type (/\))
 import Effect (Effect)
 import Effect.Now as Now
 import Effect.Ref as Ref
-import Game.Common (Dir(..), tileSize)
+import Game.Common (Dir(..), forM_, tileSize)
+import Game.Food (drawFoods)
 import Game.Ghost.Update (drawGhost)
 import Game.Graphics.Sprite (loadSpriteSheet)
 import Game.Maze (Maze, TileKind(..), mapSize)
@@ -32,16 +33,6 @@ import Web.HTML.Window (Window, document, requestAnimationFrame)
 import Web.UIEvent.KeyboardEvent as KE
 
 infixl 5 unsafeIndex as <!!>
-
-forM_ :: forall m a. Monad m => Int -> Int -> (Int -> m a) -> m Unit
-forM_ from to callback =
-  go from
-  where
-  go x =
-    if (x < to) then do
-      void $ callback x
-      go (x + 1)
-    else pure unit
 
 drawMaze :: CanvasImageSource -> Context2D -> Maze -> Effect Unit
 drawMaze atlas ctx maze = do
@@ -107,6 +98,7 @@ draw ctx game = do
   state <- Ref.read game.stateRef
   drawMaze game.atlas ctx state.maze
   pacmanDraw ctx state.pacman
+  drawFoods ctx state.foods
   for_ state.ghosts $ drawGhost ctx
 
 loop :: Context2D -> Window -> Game -> Number -> Effect Unit
