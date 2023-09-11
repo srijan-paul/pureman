@@ -1,22 +1,13 @@
 module Game.Food
   ( Food
-  , drawFoods
-  , foodSizePx
   , allFoods
+  , foodSizePx
   ) where
 
 import Prelude
 
-import Data.Array (filter)
-import Data.Foldable (for_)
-import Data.Int (toNumber)
+import Game.Maze (foodLocations)
 import Data.Tuple.Nested ((/\))
-import Effect (Effect)
-import Game.Common (aligned, tileSize)
-import Game.Maze (foodLocations, toRowCol)
-import Game.State (State)
-import Graphics.Canvas (Context2D, fillRect, setFillStyle)
-import Undefined (undefined)
 
 type Food =
   { row :: Int
@@ -25,4 +16,8 @@ type Food =
   }
 
 foodSizePx :: Number
-foodSizePx = 4.0
+foodSizePx = 3.0
+
+allFoods :: Array Food
+allFoods =
+  foodLocations <#> \(row /\ col) -> { row, col, eaten: false }

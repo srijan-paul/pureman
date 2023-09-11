@@ -5,14 +5,14 @@ module Game.Player.Update
 
 import Prelude
 
-import Data.Maybe (Maybe(..))
 import Data.Tuple (fst, snd)
 import Data.Tuple.Nested ((/\))
 import Effect (Effect)
-import Game.Common (Dir(..), Vec2, collision, tileSize, aligned, dir2Vector)
+import Game.Common (Dir(..), tileSize, aligned)
+import Game.Entity (move)
 import Game.Graphics.Animation (drawAnimation, stepAnimation)
 import Game.Graphics.Sprite (dirToAnimation)
-import Game.Maze (isWall, isWallAt, tileAt, toRowCol, turnRowCol)
+import Game.Maze (isWallAt, toRowCol, turnRowCol)
 import Game.Player.Pacman (Pacman)
 import Game.State (State)
 import Graphics.Canvas (Context2D)
@@ -25,7 +25,7 @@ pacmanUpdate :: Number -> State -> Pacman -> Pacman
 pacmanUpdate dt { maze } pureman@{ animation, pos, moveDir, turnDir } =
   pureman
     { animation = stepAnimation dt animation'
-    , pos = move moveDir'
+    , pos = pos'
     , moveDir = moveDir'
     , turnDir = turnDir'
     }
@@ -53,17 +53,4 @@ pacmanUpdate dt { maze } pureman@{ animation, pos, moveDir, turnDir } =
       -- Otherwise, continue moving in the direction we're currently facing.
       (moveDir /\ turnDir /\ animation)
 
-  move :: Dir -> Vec2
-  move dir =
-    let
-      dpos = dir2Vector dir
-      newPos = pos + dpos
-      (row' /\ col') = turnRowCol row col dir
-    in
-      case tileAt maze row' col' of
-        Just tile ->
-          if (isWall tile.kind && collision newPos tile.pos) then
-            pos
-          else
-            newPos
-        Nothing -> pos
+  pos' = move maze row col pos moveDir'

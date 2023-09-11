@@ -15,7 +15,7 @@ import Effect (Effect)
 import Effect.Now as Now
 import Effect.Ref as Ref
 import Game.Common (Dir(..), forM_, tileSize)
-import Game.Food (drawFoods)
+import Game.Food.Update (drawFoods)
 import Game.Ghost.Update (drawGhost)
 import Game.Graphics.Sprite (loadSpriteSheet)
 import Game.Maze (Maze, TileKind(..), mapSize)

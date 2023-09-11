@@ -1,4 +1,8 @@
-- [ ] Fix flaky wall collision for ghosts
-- [ ] Ghost flickers between up and down directions
-- [ ] Add more ghosts
-
+- [x] Fix flaky wall collision for ghosts
+- [x] Ghost flickers between up and down directions
+- [x] Add more ghosts
+- [ ] Food pellets
+- [ ] Score
+- [ ] Lives
+- [ ] Ghost cycles (Scatter / Chase)
+- [ ] Use STArray to construct food pellets in the maze
