@@ -2,12 +2,13 @@ module Game.Food.Update where
 
 import Prelude
 
-import Data.Array (filter)
+import Data.Array (deleteAt, findIndex)
 import Data.Foldable (for_)
 import Data.Int (toNumber)
+import Data.Maybe (Maybe(..))
 import Data.Number (pi)
 import Data.Tuple (fst, snd)
-import Data.Tuple.Nested ((/\))
+import Data.Tuple.Nested ((/\), type (/\))
 import Effect (Effect)
 import Game.Common (aligned, tileSize)
 import Game.Food (Food, foodSizePx)
@@ -35,15 +36,22 @@ drawFoods ctx foods = do
         , useCounterClockwise: false
         }
 
-updateFoods :: State -> Array Food -> Array Food
+updateFoods :: State -> Array Food -> (Int /\ Array Food)
 updateFoods { pacman } foods =
   let
     pacmanPos = pacman.pos
     (pacRow /\ pacCol) = toRowCol pacmanPos
     isPacmanAligned = aligned (fst pacmanPos) && aligned (snd pacmanPos)
-
     touchesPacman food =
       food.row == pacRow && food.col == pacCol
   in
-    if isPacmanAligned then filter (not <<< touchesPacman) foods
-    else foods
+    if isPacmanAligned then
+      let
+        updatedFoods' = do
+          index <- findIndex touchesPacman foods
+          deleteAt index foods
+      in
+        case updatedFoods' of
+          Just newFoods -> (10 /\ newFoods)
+          Nothing -> (0 /\ foods)
+    else (0 /\ foods)

@@ -16,6 +16,7 @@ type State =
   , maze :: Maze
   , ghosts :: Array Ghost
   , foods :: Array Food
+  , score :: Int
   }
 
 type Game =
@@ -32,4 +33,5 @@ newState atlas =
     , maze
     , ghosts: [ makeBlinky atlas, makePinky atlas ]
     , foods: allFoods
+    , score: 0
     }
