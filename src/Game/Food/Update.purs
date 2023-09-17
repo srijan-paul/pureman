@@ -19,8 +19,7 @@ import Graphics.Canvas (Context2D, arc, fillPath, setFillStyle)
 drawFoods :: Context2D -> Array Food -> Effect Unit
 drawFoods ctx foods = do
   setFillStyle ctx "#b6ed77"
-  for_ foods $ \food -> do
-    when (not food.eaten) $ drawFood food
+  for_ foods drawFood
   where
   drawFood { row, col } =
     let

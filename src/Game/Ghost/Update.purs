@@ -2,13 +2,13 @@ module Game.Ghost.Update where
 
 import Prelude
 
-import Data.Array (filter, sortBy, (!!))
+import Data.Array (filter, length, sortBy, (!!))
 import Data.Maybe (Maybe(..))
 import Data.Tuple.Nested ((/\), type (/\))
 import Effect (Effect)
 import Game.Common (oppositeDir, pair2Dir, tileSize)
 import Game.Entity (canTurn, move)
-import Game.Ghost (Ghost)
+import Game.Ghost (Ghost, GhostBehavior, currentMode)
 import Game.Graphics.Animation (drawAnimation, stepAnimation)
 import Game.Graphics.Sprite (dirToAnimation)
 import Game.Maze (at, isWall, toRowCol)
@@ -23,16 +23,38 @@ tileDist (r1 /\ c1) (r2 /\ c2) =
   dr = r2 - r1
   dc = c2 - c1
 
+updateBehavior :: Number -> GhostBehavior -> GhostBehavior
+updateBehavior
+  dt
+  behavior@{ timeSpentInCurrentMode, scheme, currentModeIndex } =
+  case scheme !! currentModeIndex of
+    Just (_ /\ modeDuration) ->
+      let
+        timeSpent' =
+          if timeSpentInCurrentMode + dt > modeDuration then 0.0
+          else timeSpentInCurrentMode + dt
+        nextSchemeIndex =
+          if currentModeIndex + 1 < length scheme then currentModeIndex + 1
+          else 0
+        schemeIndex' =
+          if timeSpent' == 0.0 then nextSchemeIndex
+          else currentModeIndex
+      in
+        behavior { timeSpentInCurrentMode = timeSpent', currentModeIndex = schemeIndex' }
+    Nothing -> behavior
+
 updateGhost :: Number -> State -> Ghost -> Ghost
-updateGhost dt { maze, pacman } ghost@{ pos, animations, moveDir, activeAnimation, ai } =
+updateGhost dt { maze, pacman } ghost@{ pos, animations, moveDir, activeAnimation, ai, behavior } =
   ghost
     { activeAnimation = stepAnimation dt activeAnimation'
     , pos = move maze row col ghost.pos moveDir'
     , moveDir = moveDir'
+    , behavior = updateBehavior dt behavior
     }
 
   where
-  targetTile = ai pacman
+  mode = currentMode ghost
+  targetTile = ai mode pacman
   (row /\ col) = toRowCol ghost.pos
 
   -- list of tile coordinates that ghost can move to

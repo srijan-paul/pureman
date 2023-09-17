@@ -26,12 +26,9 @@ type Game =
 
 newState :: CanvasImageSource -> State
 newState atlas =
-  let
-    maze = pacmanMaze
-  in
-    { pacman: newPacman atlas
-    , maze
-    , ghosts: [ makeBlinky atlas, makePinky atlas ]
-    , foods: allFoods
-    , score: 0
-    }
+  { pacman: newPacman atlas
+  , maze: pacmanMaze
+  , ghosts: [ makeBlinky atlas, makePinky atlas ]
+  , foods: allFoods
+  , score: 0
+  }

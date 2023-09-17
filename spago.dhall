@@ -19,11 +19,14 @@ to generate this file without the comments in this block.
   , "effect"
   , "foldable-traversable"
   , "integers"
+  , "lists"
   , "maybe"
   , "now"
   , "numbers"
   , "partial"
   , "prelude"
+  , "refs"
+  , "st"
   , "strings"
   , "tuples"
   , "undefined"
@@ -32,8 +35,6 @@ to generate this file without the comments in this block.
   , "web-events"
   , "web-html"
   , "web-uievents"
-  , "lists"
-  , "refs"
   ]
 , packages = ./packages.dhall
 , sources = [ "src/**/*.purs", "test/**/*.purs" ]
