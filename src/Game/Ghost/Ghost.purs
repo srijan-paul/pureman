@@ -11,9 +11,9 @@ module Game.Ghost
 
 import Prelude
 
-import Data.Maybe (Maybe(..))
 import Data.Array ((!!))
-import Data.Tuple (fst)
+import Data.Maybe (Maybe(..))
+import Data.Tuple (snd)
 import Data.Tuple.Nested (type (/\), (/\))
 import Game.Common (Dir(..), tileSize, Vec2, vec)
 import Game.Graphics.Animation (Animation)
@@ -89,7 +89,7 @@ makeBlinky atlas =
     if mode == Chase then
       toRowCol pacman.pos
     else
-      (0 /\ 0)
+      (3 /\ 0)
 
 makePinky :: CanvasImageSource -> Ghost
 makePinky atlas =
@@ -113,4 +113,4 @@ makePinky atlas =
           Right -> pacRow /\ (pacCol + 4)
           None -> (pacRow /\ pacCol)
     else
-      (fst mapSize /\ 0)
+      (0 /\ snd mapSize)
